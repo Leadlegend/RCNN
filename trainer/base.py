@@ -16,11 +16,12 @@ class Trainer:
                  device,
                  data_loader,
                  valid_data_loader=None,
+                 steps_per_epoch=None,
                  lr_scheduler=None):
         self.config = config
         self.device = device
         self.model = model.to(device)
-        self.criterion = criterion
+        self.criterion = criterion.to(device)
         self.optimizer = optimizer
 
         self.data_loader = data_loader
@@ -32,6 +33,7 @@ class Trainer:
         self.save_period = config.save_period
         self.checkpoint_dir = config.save_dir
         self.epochs = config.epoch
+        self.steps_num = steps_per_epoch
 
         # setup visualization writer instance
         self.logger = logging.getLogger('Trainer')
@@ -51,7 +53,10 @@ class Trainer:
 
     def train(self):
         for epoch in range(self.start_epoch, self.epochs + 1):
-            result = self._train_epoch(epoch)
+            if self.steps_num is not None and self.steps_num > 0:
+                result = self._train_bystep(epoch)
+            else:
+                result = self._train_epoch(epoch)
 
             # save logged informations into log dict
             log = {'epoch': epoch}
@@ -77,7 +82,6 @@ class Trainer:
             self.optimizer.step()
 
             log.update({str(batch_idx): loss.item()})
-
             if batch_idx % self.log_step == 0:
                 self.logger.info('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch, self._progress(batch_idx), loss.item()))
@@ -101,6 +105,33 @@ class Trainer:
                 loss = self.criterion(output, target)
                 log.update({str(batch_idx): loss.item()})
         return log
+
+    def _train_bystep(self, epoch):
+        self.model.train()
+        log = dict()
+        for batch_idx in range(self.steps_num):
+            data, label = self.data_loader.get_batch()
+            data, label = data.to(self.device), label.to(self.device)
+
+            self.optimizer.zero_grad()
+            output = self.model(data)
+            loss = self.criterion(output, label)
+            loss.backward()
+            self.optimizer.step()
+
+            log.update({str(batch_idx): loss.item()})
+            if batch_idx % self.log_step == 0:
+                self.logger.info('Train Epoch: {} {} Loss: {:.6f}'.format(
+                    epoch, self._progress(batch_idx), loss.item()))
+
+        if self.do_validation:
+            val_log = self._valid_epoch(epoch)
+            log.update(**{'val_' + k: v for k, v in val_log.items()})
+
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step()
+        return log
+
 
     def _progress(self, batch_idx):
         base = '[{}/{} ({:.0f}%)]'
@@ -147,7 +178,7 @@ class Trainer:
             except Exception as e:
                 self.logger.error(
                     'Different model structture, optimizer or lr_scheduler, \
-                    Please ensure you use the same configuration before resuming training.'                                                                                           ,
+                    Please ensure you use the same configuration before resuming training.'                                                                                                                                                                                                                                                                                 ,
                     stack_info=True)
         else:
             # which means that we load the ckpt not to resume training, thus the params may not match perfectly.

@@ -8,14 +8,15 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.core.config_store import ConfigStore
 from model.criterions import *
 
-
 cfg2opt = {
     "adam": partial(opt.Adam, betas=(0.9, 0.99), eps=1e-05),
-    "sgd": opt.SGD,
+    "sgd": partial(opt.SGD, momentum=0.9),
 }
 cfg2sch = {
     "None":
     None,
+    "Step":
+    partial(opt.lr_scheduler.StepLR, step_size=7, gamma=0.1),
     "Plateau":
     partial(
         opt.lr_scheduler.ReduceLROnPlateau,
@@ -25,11 +26,6 @@ cfg2sch = {
         cooldown=2,
         min_lr=2e-5,
     ),
-}
-cfg2ep_crt = {
-    'none': None,
-    "pearson": None,
-    'spearman': None,
 }
 
 
