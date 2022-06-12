@@ -2,24 +2,14 @@ import torch
 import hydra
 
 from logger import setup_logging
-from model.criterions import Loss
 from trainer.base import Trainer
 from data.datamodule import DataModule
 from model import model_factory, criterion_factory
-from config import args_util, cfg2opt, cfg2sch
-
-
-def init_optimizer(cfg, model):
-    opt, lr, sched = cfg.optimizer.lower(), cfg.lr, cfg.scheduler
-    optimizer = cfg2opt[opt](params=model.parameters(), lr=lr)
-    scheduler = cfg2sch.get(sched, None)
-    if scheduler is not None:
-        scheduler = scheduler(optimizer=optimizer)
-    return optimizer, scheduler
+from config import args_util, init_optimizer
 
 
 def train(cfg):
-    datamodule = DataModule(cfg.data)
+    datamodule = DataModule(cfg=cfg.data, name=cfg.name)
     train_loader, val_loader = datamodule.train_dataloader(), datamodule.val_dataloader()
     model = model_factory[cfg.name](cfg.model)
     criterion = criterion_factory[cfg.name]
@@ -30,10 +20,11 @@ def train(cfg):
     trainer.train()
 
 
-@hydra.main(config_path='../config', config_name='base')
+@hydra.main(config_path='./config', config_name='train_step3')
 def main(configs):
     setup_logging(save_dir=configs.logger.save_dir,
-                  log_config=configs.logger.cfg_path)
+                  log_config=configs.logger.cfg_path,
+                  file_name=configs.name+'.log')
     torch.set_printoptions(precision=5)
     train(cfg=configs)
 
