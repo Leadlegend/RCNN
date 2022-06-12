@@ -1,0 +1,9 @@
+path: no_train_data
+batch_size: 1024
+shuffle: false
+pin: false
+lazy: false
+workers: 8
+
+img_size: 227
+save_dir: ../../train_data/generate/

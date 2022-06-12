@@ -1,5 +1,5 @@
-path: ../../data/train.txt
-batch_size: 1024
+path: ../../data/val.txt
+batch_size: 128
 shuffle: false
 pin: false
 lazy: false

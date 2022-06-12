@@ -1,0 +1,13 @@
+path: ../../train_data
+info:
+  year: '2012'
+  image_set: train
+  download: false
+batch_size: 128
+pin: false
+lazy: false
+workers: 16
+img_size: 227
+threshold: 0.5
+save_dir: ../../train_data/generate/
+

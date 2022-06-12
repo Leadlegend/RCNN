@@ -1,0 +1,11 @@
+path: ../../train_data
+info:
+  year: '2012'
+  image_set: trainval
+  download: false
+pin: false
+lazy: false
+img_size: 227
+threshold: 0.3
+reg_threshold: 0.6
+save_dir: ../../train_data/generate/

@@ -1,5 +1,5 @@
 path: ../../data/val.txt
-batch_size: 256
+batch_size: 128
 shuffle: false
 pin: false
 lazy: false

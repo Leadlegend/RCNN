@@ -1,0 +1,12 @@
+defaults:
+  - base_train
+
+lr: 1e-2
+epoch: 300
+device: cuda:0
+save_dir: ../../ckpt/step1/
+save_period: 20  
+ckpt: https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth
+optimizer: sgd
+scheduler: None
+

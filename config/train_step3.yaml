@@ -1,0 +1,8 @@
+defaults:
+  - data: train_step3
+  - model: null
+  - trainer: train_step3
+  - logger: base
+  - _self_
+
+name: svm

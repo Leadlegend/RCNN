@@ -1,0 +1,8 @@
+defaults:
+  - train: step3
+  - val: step3
+  - base_train
+  - _self_
+
+test: null
+tokenizer: ../../train_data/voc_vocab.txt

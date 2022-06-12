@@ -1,0 +1,8 @@
+defaults:
+  - data: train_step2
+  - model: train_step2
+  - trainer: train_step2
+  - logger: base
+  - _self_
+
+name: finetune

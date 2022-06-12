@@ -1,0 +1,7 @@
+path: ../../train_data/ILSVRC_2012_train
+batch_size: 1024
+shuffle: True
+pin: false
+lazy: false
+workers: 16
+img_size: 227

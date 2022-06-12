@@ -1,0 +1,8 @@
+defaults:
+  - data: train_step4
+  - model: train_step4
+  - trainer: train_step4
+  - logger: base
+  - _self_
+
+name: reg
