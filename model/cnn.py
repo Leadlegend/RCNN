@@ -15,6 +15,7 @@ class CNNModel(BaseModel):
         CNN image-classification model for pre-training stage
         currently implemented AlexNet backend, which is default choice of R-CNN
     """
+
     def __init__(self, cfg, device):
         super(CNNModel, self).__init__(cfg, device)
         self._construct_network()
@@ -54,11 +55,12 @@ class CNNModel(BaseModel):
 
     def _init_weights(self, ckpt: Optional[str]):
         if ckpt is None or not ckpt.startswith('http'):
-            logger.error('Bad Checkpoint URL for Pre-Trained Model.', stack_info=True)
+            logger.error(
+                'Bad Checkpoint URL for Pre-Trained Model.', stack_info=True)
             raise ValueError
-        logger.info("Downloading Pre-Trained Model Params from %s" % self.cfg.url)
+        logger.info("Downloading Pre-Trained Model Params from %s" % ckpt)
         state_dict = load_state_dict_from_url(
-            self.cfg.url, progress=True)
+            ckpt, progress=True)
         current_state = self.state_dict()
         keys = list(state_dict.keys())
         for key in keys:
@@ -93,7 +95,8 @@ class FtCNNModel(CNNModel):
             logger.error(
                 'Bad Checkpoint Path for Supervised Pre-Trained Model.', stack_info=True)
             raise ValueError
-        logger.info("Loading Checkpoint from Supervised Pre-Trained Model at %s")
+        logger.info(
+            "Loading Checkpoint from Supervised Pre-Trained Model at %s" % ckpt)
         ckpt = torch.load(ckpt)
         if 'state_dict' in ckpt:
             ckpt = ckpt['state_dict']
@@ -103,4 +106,3 @@ class FtCNNModel(CNNModel):
         for key in keys:
             if not key.startswith('fn10'):
                 current_state[key] = ckpt[key]
-

@@ -25,13 +25,19 @@ def load_vocab(vocab_file, has_index=False):
 
 
 class Tokenizer:
-    def __init__(self, vocab_file: str, has_index: bool, unk_token='[UNK]'):
+    def __init__(self, vocab_file: str, has_index: bool = False, unk_token='[UNK]'):
         if not os.path.exists(vocab_file):
             raise ValueError("Can't Find Vocabulary File %s" % vocab_file)
         self.unk_token = unk_token
         self.vocab = load_vocab(vocab_file, has_index=has_index)
         self.reverse_vocab = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocab.items()])
+
+    def __call__(self, obj):
+        if isinstance(obj, str):
+            return self._convert_token_to_id(obj)
+        elif isinstance(obj, int):
+            return self._convert_id_to_token(obj)
 
     def convert_tokens_to_ids(self, tokens: Union[List[str], str]) -> Union[int, List[int]]:
         if tokens is None:
@@ -44,7 +50,7 @@ class Tokenizer:
         return ids
 
     def _convert_token_to_id(self, token: str) -> int:
-        return self.vocab.get(token, self.unk_token)
+        return self.vocab.get(token, -1)
 
     def convert_ids_to_tokens(self, ids: Union[int, List[int]]) -> Union[int, List[int]]:
         if ids is None:
@@ -57,4 +63,4 @@ class Tokenizer:
         return tokens
 
     def _convert_id_to_token(self, id: int) -> str:
-        return self.reverse_vocab.get(id, -1)
+        return self.reverse_vocab.get(id, self.unk_token)

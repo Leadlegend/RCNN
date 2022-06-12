@@ -1,32 +1,14 @@
 import cv2
+import numpy as np
 
-from ..model.regoin_proposal import selective_search
-from .dataset import AlexnetDataset, FtDataset, SVMDataset, RegDataset
-from .collate_fn import alex_collate_fn, ft_collate_fn, reg_collate_fn
-
-
-dataset_factory = {
-    'alex': AlexnetDataset,
-    'finetune': FtDataset,
-    'svm': SVMDataset,
-    'reg': RegDataset,
-}
-
-collate_factory = {
-    'alex': alex_collate_fn,
-    'finetune': ft_collate_fn,
-    'reg': reg_collate_fn,
-    'svm': None
-}
+from model.regoin_proposal import selective_search
 
 
-def region_proposal(img_path, img_size):
+def region_proposal(img, img_size):
     '''
     use selective-search to obtain image's region proposals;
     add some hand-crafted rules to refine proposals
     '''
-    img = cv2.imread(img_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_lbl, regions = selective_search(img, scale=500, sigma=0.9, min_size=10)
     candidates = set()
     images = []
@@ -57,19 +39,24 @@ def region_proposal(img_path, img_size):
     return images, vertices, rects
 
 
-def iou(ver1, vertice2):
+def iou(ver1, vertice2, if_wh=False):
     '''
     calculate the IOU of two verts
-    :param ver1: the first vert
-    :param vertice2: the second vert
+    :param ver1: the first vert [x_min, y_min, x_max, y_max] / [x, y, w, h]
+    :param vertice2: the second vert [x_min, y_min, x_max, y_max, w, h]
+    :param if_wh: whether ver1 is of [x, y, w, h]
     :return: IOU value
     '''
-    vertice1 = [ver1[0], ver1[1], ver1[0] + ver1[2], ver1[1] + ver1[3]]
+    if if_wh:
+        vertice1 = [ver1[0], ver1[1], ver1[0] + ver1[2], ver1[1] + ver1[3]]
+    else:
+        vertice1 = ver1
     area_inter = if_intersection(vertice1[0], vertice1[2], vertice1[1],
                                  vertice1[3], vertice2[0], vertice2[2],
                                  vertice2[1], vertice2[3])
     if area_inter:
-        area_1 = ver1[2] * ver1[3]
+        area_1 = ver1[2] * \
+            ver1[3] if if_wh else (ver1[2]-ver1[0]) * (ver1[3]-ver1[1])
         area_2 = vertice2[4] * vertice2[5]
         iou = float(area_inter) / (area_1 + area_2 - area_inter)
         return iou
@@ -120,3 +107,17 @@ def resize_image(in_image,
     if out_image is not None:
         cv2.imwrite(out_image, img)
     return img
+
+
+def clip_pic(img, rect):
+    '''
+
+    :param img: input image
+    :param rect: four params of the rect
+    :return: the clipped image and the rect
+    '''
+    assert len(rect) == 4
+    x_min, y_min, w, h = rect[0], rect[1], rect[2], rect[3]
+    x_max = x_min + w
+    y_max = y_min + h
+    return img[y_min:y_max, x_min:x_max, :], [x_min, y_min, x_max, y_max, w, h]
