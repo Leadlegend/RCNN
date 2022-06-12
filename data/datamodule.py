@@ -4,7 +4,8 @@ import logging
 from functools import partial
 from torch.utils.data import DataLoader
 
-from .util import dataset_factory, collate_factory
+from data import dataset_factory, collate_factory
+from .tokenizer import Tokenizer
 
 
 class DataModule:
@@ -12,6 +13,9 @@ class DataModule:
         self.logger = logging.getLogger('%s-DataModule' % name)
         self.cfg = cfg
         self.name = name
+        self.tokenizer = cfg.tokenizer
+        if self.tokenizer is not None:
+            self.tokenizer = Tokenizer(self.tokenizer)
         self._dataset = dataset_factory[name]
         self._collate_fn = collate_factory[name]
         self.epoch_flag = (name in ['alex', 'reg'])
@@ -22,26 +26,26 @@ class DataModule:
         if self.cfg.train is not None:
             self.logger.info("Constructing Train Data...")
             self.train_dataset = self._dataset(
-                self.cfg.train)
+                self.cfg.train, tokenizer=self.tokenizer)
         else:
             self.logger.warning('No Valid Train Data.')
         if self.cfg.val is not None:
             self.logger.info("Constructing Validation Data...")
             self.val_dataset = self._dataset(
-                self.cfg.val)
+                self.cfg.val, tokenizer=self.tokenizer)
         else:
             self.logger.warning('No Valid Val Data.')
         if self.cfg.test is not None:
             self.logger.info("Constructing Test Data...")
             self.test_dataset = self._dataset(
-                self.cfg.test)
+                self.cfg.test, tokenizer=self.tokenizer)
         else:
             self.logger.warning('No Valid Test Data.')
 
-    def _construct_loader(self, cfg, dataset):
+    def _construct_loader(self, cfg, dataset, flag=False):
         if cfg is None:
             return None
-        if self.epoch_flag:
+        if self.epoch_flag or flag:
             return DataLoader(dataset=dataset,
                               batch_size=cfg.batch_size,
                               collate_fn=self._collate_fn,
@@ -56,7 +60,7 @@ class DataModule:
         return self._construct_loader(self.cfg.train, self.train_dataset)
 
     def val_dataloader(self):
-        return self._construct_loader(self.cfg.val, self.val_dataset)
+        return self._construct_loader(self.cfg.val, self.val_dataset, flag=True)
 
     def test_dataloader(self):
-        return self._construct_loader(self.cfg.test, self.test_dataset)
+        return self._construct_loader(self.cfg.test, self.test_dataset, flag=True)
