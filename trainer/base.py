@@ -21,7 +21,7 @@ class Trainer:
         self.config = config
         self.device = device
         self.model = model.to(device)
-        self.criterion = criterion.to(device)
+        self.criterion = criterion
         self.optimizer = optimizer
 
         self.data_loader = data_loader
@@ -31,7 +31,8 @@ class Trainer:
         self.lr_scheduler = lr_scheduler
         self.start_epoch = 1
         self.save_period = config.save_period
-        self.checkpoint_dir = config.save_dir
+        self.save_dir = config.save_dir
+        self.ckpt = config.ckpt
         self.epochs = config.epoch
         self.steps_num = steps_per_epoch
 
@@ -41,15 +42,23 @@ class Trainer:
         self.logger.info('Logger Trainer will report info every %d steps' %
                          self.log_step)
 
-        if not os.path.exists(self.checkpoint_dir):
+        if not os.path.exists(self.save_dir):
             self.logger.warning(
                 'Bad checkpoint save directory %s, try to create it.' %
-                self.checkpoint_dir)
+                self.save_dir)
             try:
-                subprocess.run('mkdir -p %s' % self.checkpoint_dir)
+                subprocess.run('mkdir -p %s' % self.save_dir)
             except:
                 raise ValueError('Cannot create directory %s' %
-                                 self.checkpoint_dir)
+                                 self.save_dir)
+
+        if self.ckpt is None:
+            logger.warning(
+                'The model is not initialized, please make sure if you are running Regression')
+        else:
+            logger.info(
+                'Initializing the model with checkpoint at %s' % self.ckpt)
+            self.model._resume_checkpoint(self.ckpt)
 
     def train(self):
         for epoch in range(self.start_epoch, self.epochs + 1):
@@ -132,15 +141,17 @@ class Trainer:
             self.lr_scheduler.step()
         return log
 
-
     def _progress(self, batch_idx):
         base = '[{}/{} ({:.0f}%)]'
-        if hasattr(self.data_loader, 'n_samples'):
+        if hasattr(self.data_loader, 'n_samples') and self.steps_num is None:
             current = batch_idx * self.data_loader.batch_size
             total = self.data_loader.n_samples
-        else:
+        elif self.steps_num is None:
             current = batch_idx
             total = self.len_epoch
+        else:
+            current = batch_idx
+            total = self.steps_num
         return base.format(current, total, 100.0 * current / total)
 
     def _save_checkpoint(self, epoch):
@@ -152,37 +163,38 @@ class Trainer:
         }
         if self.lr_scheduler is not None:
             state['scheduler'] = self.lr_scheduler.state_dict()
-        filename = os.path.join(self.checkpoint_dir,
+        filename = os.path.join(self.save_dir,
                                 'ckpt-epoch{}.pt'.format(epoch))
         torch.save(state, filename)
         self.logger.info("Saving checkpoint: {} ...".format(filename))
 
     def _resume_checkpoint(self, resume_path):
-        resume_path = str(resume_path)
-        if not os.path.exists(resume_path):
-            self.logger.error("Bad checkpoint path: {}".format(resume_path))
-            sys.exit(1)
+        checkpoint = str(resume_path)
         self.logger.info("Loading checkpoint: {} ...".format(resume_path))
-        checkpoint = torch.load(resume_path,
-                                map_location=torch.device(self.device))
-        # we should make resume process robust to use various kinds of ckpt
-        if 'epoch' in checkpoint:
-            self.start_epoch = checkpoint['epoch'] + 1
-        # load optimizer state from checkpoint only when optimizer type is not changed.
-        if 'state_dict' in checkpoint:
-            try:
-                self.model.load_state_dict(checkpoint['state_dict'],
-                                           strict=False)
-                self.optimizer.load_state_dict(checkpoint['optimizer'])
-                self.lr_scheduler.load_state_dict(checkpoint['scheduler'])
-            except Exception as e:
-                self.logger.error(
-                    'Different model structture, optimizer or lr_scheduler, \
-                    Please ensure you use the same configuration before resuming training.'                                                                                                                                                                                                                                                                                 ,
-                    stack_info=True)
+        if os.path.exists(checkpoint):
+            checkpoint = torch.load(checkpoint,
+                                    map_location=torch.device(self.device))
+            # we should make resume process robust to use various kinds of ckpt
+            if 'epoch' in checkpoint:
+                self.start_epoch = checkpoint['epoch'] + 1
+            # load optimizer state from checkpoint only when optimizer type is not changed.
+            if 'state_dict' in checkpoint:
+                try:
+                    self.model.load_state_dict(checkpoint['state_dict'],
+                                               strict=True)
+                    self.optimizer.load_state_dict(checkpoint['optimizer'])
+                    self.lr_scheduler.load_state_dict(checkpoint['scheduler'])
+                except Exception as e:
+                    self.logger.error(
+                        'Different model structture, optimizer or lr_scheduler, \
+                        Please ensure you use the same configuration before resuming training.',
+                        stack_info=True)
+            else:
+                logger.info('Loading Model Params from Previous Training Step')
+                self.model._init_weights(checkpoint)
         else:
-            # which means that we load the ckpt not to resume training, thus the params may not match perfectly.
-            self.model.load_state_dict(checkpoint, strict=False)
+            logger.info('Loading Model Params with URL.')
+            self.model._init_weights(checkpoint)
 
         self.logger.info(
             "Checkpoint loaded. Resume training from epoch {}".format(
