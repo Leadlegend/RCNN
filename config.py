@@ -29,19 +29,35 @@ cfg2sch = {
 }
 
 
+def init_optimizer(cfg, model):
+    opt, lr, sched = cfg.optimizer.lower(), cfg.lr, cfg.scheduler
+    optimizer = cfg2opt[opt](params=model.parameters(), lr=lr)
+    scheduler = cfg2sch.get(sched, None)
+    if scheduler is not None:
+        scheduler = scheduler(optimizer=optimizer)
+    return optimizer, scheduler
+
+
 @dataclass
 class DatasetConfig:
+    save_dir: str
     path: Union[List[str], str]
-    batch_size: int = 1
-    shuffle: bool = False
-    pin: bool = False
-    workers: int = 0
-    lazy: bool = False
+    info : Optional[dict] = None
+    data_root: Optional[str] = None
+    img_size: int = 227
+    threshold: Optional[float] = 0.5
+    reg_threshold: Optional[float] = 0.0
+    batch_size: Optional[int] = 1
+    pin: Optional[bool] = False
+    shuffle: Optional[bool] = False
+    workers: Optional[int] = 0
+    lazy: Optional[bool] = False
     label: Optional[bool] = True
 
 
 @dataclass
 class DataConfig:
+    tokenizer: Optional[str]
     train: Optional[DatasetConfig]
     val: Optional[DatasetConfig]
     test: Optional[DatasetConfig]
@@ -53,11 +69,11 @@ class TrainerConfig:
     epoch: int  # epoch number
     device: str  # Cuda / cpu
     save_dir: str  # model checkpoint saving directory
-    save_period: int = 1  # save one checkpoint every $save_period epoch
-    ckpt: Optional[str] = None  # model initialization
-    optimizer: Optional[str] = 'adam'  # optimizer name
-    scheduler: Optional[str] = 'None'  # lr_scheduler name
-    epoch_criterion: Optional[str] = 'none'
+    save_period: int = 5  # save one checkpoint every $save_period epoch
+    ckpt: Optional[str] = None
+    # model initialization or checkpoint resuming
+    optimizer: Optional[str] = 'sgd'  # optimizer name
+    scheduler: Optional[str] = 'Step'  # lr_scheduler name
 
 
 @dataclass
@@ -68,21 +84,23 @@ class LoggerConfig:
 
 @dataclass
 class ModelConfig:
-    final_hid: int = 6
+    output_size: Optional[int]
+    name: str = 'model'
 
 
 @dataclass
 class Config:
+    name: str
     data: DataConfig
-    model: ModelConfig
     trainer: TrainerConfig
     logger: LoggerConfig
+    model: Optional[ModelConfig]
 
-
+"""
 @hydra.main(config_path='../config', config_name='base')
 def main(cfg: Config):
     return cfg
-
+"""
 
 def args_util():
     """
