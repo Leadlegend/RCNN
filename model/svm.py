@@ -1,8 +1,8 @@
 import os
 import torch
+import joblib
 
 from sklearn import svm
-from sklearn.externals import joblib
 
 
 class SVMModel:
