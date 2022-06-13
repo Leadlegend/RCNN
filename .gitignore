@@ -5,7 +5,10 @@ test/
 *__pycache__
 outputs/
 configs/
+RCNN/
 *_all.txt
 *.pt
 data/cross_valid/
 .vscode
+train_data/
+test_data/
