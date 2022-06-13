@@ -13,7 +13,6 @@ def region_proposal(img, img_size):
     candidates = set()
     images = []
     vertices = []
-    rects = []
     for r in regions:
         if r['rect'] in candidates:
             continue
@@ -35,8 +34,7 @@ def region_proposal(img, img_size):
         img_float = np.asarray(resized_proposal_img, dtype="float32")
         images.append(img_float)
         vertices.append(proposal_vertice)
-        rects.append(r['rect'])
-    return images, vertices, rects
+    return images, vertices
 
 
 def iou(ver1, vertice2, if_wh=False):

@@ -167,21 +167,24 @@ class FtDataset(BaseDataset):
                       bd_box['xmax'], bd_box['ymax']]
             bd_box = [int(x) for x in bd_box]
             res_objs.append({'label': label, 'bndbox': bd_box})
+        objects.clear()
         return res_objs
 
     def _parse_data(self, img, objects):
-        images, regions_pred, _ = region_proposal(img, self.img_size)
+        images, regions_pred = region_proposal(img, self.img_size)
         for image, region_pred in zip(images, regions_pred):
             pos_flag = False
+            neg_flag = False
             for obj in objects:
                 region_gold = obj['bndbox']
                 iou_value = iou(region_gold, region_pred)
                 if iou_value < self.threshold:
-                    continue
+                    if iou_value > 0:
+                        neg_flag = True
                 else:
                     self.pos_data_map.append(ImgData(image, obj['label']))
                     pos_flag = True
-            if not pos_flag:
+            if not pos_flag and neg_flag:
                 self.neg_data_map.append(ImgData(image, 0))
         return None
 
@@ -300,7 +303,7 @@ class SVMDataset(Dataset):
         region_gold = data[2].split(',')
         region_gold = [int(x) for x in region_gold]
 
-        images, regions_pred, _ = region_proposal(image_path, self.img_size)
+        images, regions_pred = region_proposal(image_path, self.img_size)
         for image, region_pred in zip(images, regions_pred):
             iou_value = iou(region_gold, region_pred)
             if iou_value < self.svm_threshold:
