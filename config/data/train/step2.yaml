@@ -1,7 +1,7 @@
 path: ../../train_data
 info:
   year: '2012'
-  image_set: train
+  image_set: trainval
   download: false
 batch_size: 128
 pin: false
