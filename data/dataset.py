@@ -1,5 +1,6 @@
 import os
 import cv2
+import json
 import torch
 import joblib
 import numpy as np
@@ -13,7 +14,7 @@ from torchvision.datasets import VOCDetection
 from torch.utils.data import SubsetRandomSampler
 
 from .tokenizer import Tokenizer
-from data.util import iou, resize_image, region_proposal
+from data.util import iou, resize_image, region_proposal, clip_pic
 from .collate_fn import ft_collate_fn, ImgBatch
 
 
@@ -29,7 +30,7 @@ class ImgData:
             return self.img
 
     def __len__(self):
-        return 2 - int(label is None)
+        return 2 - int(self.label is None)
 
 
 @dataclass
@@ -48,7 +49,6 @@ class FeatureData:
 
 
 class BaseDataset(Dataset):
-
     def __init__(self, cfg, tokenizer: Optional[Tokenizer] = None, file_ext='.jpg'):
         super().__init__()
         self.ext = file_ext
@@ -133,60 +133,16 @@ class FtDataset(BaseDataset):
             cfg, tokenizer=tokenizer, file_ext=file_ext)
         self.info = cfg.info
         self.threshold = cfg.threshold
-        self.region_path = os.path.join(cfg.save_dir, 'ft.npy')
+        self.region_path = os.path.join(cfg.save_dir, 'ft.json')
         self.pos_data_map, self.neg_data_map = list(), list()
         self.pos_iter, self.neg_iter = None, None
         if os.path.exists(self.region_path):
             self._load_ckpt()
         else:
             self._construct_dataset()
-            self._merge()
-            joblib.dump(self.data_map, self.region_path)
+            self._save()
         self.pos_iter = iter(self.pos_sampler)
         self.neg_iter = iter(self.neg_sampler)
-
-    def _construct_dataset(self):
-        dataset = VOCDetection(root=self.path, **self.info)
-        for idx in tqdm(range(len(dataset))):
-            img, target = dataset[idx]
-            img = np.array(img)  # RGB image
-            objects = target['annotation']['object']
-            if isinstance(objects, dict):
-                objects = [objects]
-            objects = self._parse_obj(objects)
-            self._parse_data(img, objects)
-
-    def _parse_obj(self, objects):
-        res_objs = list()
-        for obj in objects:
-            label = self.tokenizer(obj['name'])
-            if label < 0:
-                raise ValueError
-            bd_box = obj['bndbox']
-            bd_box = [bd_box['xmin'], bd_box['ymin'],
-                      bd_box['xmax'], bd_box['ymax']]
-            bd_box = [int(x) for x in bd_box]
-            res_objs.append({'label': label, 'bndbox': bd_box})
-        objects.clear()
-        return res_objs
-
-    def _parse_data(self, img, objects):
-        images, regions_pred = region_proposal(img, self.img_size)
-        for image, region_pred in zip(images, regions_pred):
-            pos_flag = False
-            neg_flag = False
-            for obj in objects:
-                region_gold = obj['bndbox']
-                iou_value = iou(region_gold, region_pred)
-                if iou_value < self.threshold:
-                    if iou_value > 0:
-                        neg_flag = True
-                else:
-                    self.pos_data_map.append(ImgData(image, obj['label']))
-                    pos_flag = True
-            if not pos_flag and neg_flag:
-                self.neg_data_map.append(ImgData(image, 0))
-        return None
 
     @property
     def pos_sampler(self):
@@ -200,30 +156,107 @@ class FtDataset(BaseDataset):
     def pos_num(self):
         return len(self.pos_data_map)
 
+    @property
+    def neg_num(self):
+        return len(self.neg_data_map)
+
+    def __len__(self):
+        return self.pos_num + self.neg_num
+
     def __getitem__(self, idx: int):
-        if idx < len(self.pos_data_amp):
-            return self.pos_data_map[idx]
+        if idx >= self.pos_num + self.neg_num:
+            raise IndexError('Illegal Dataset Index %s' % idx)
+        elif idx < self.pos_num:
+            data = self.pos_data_map[idx]
         else:
             idx -= len(self.pos_data_map)
-            return self.neg_data_map[idx]
+            data = self.neg_data_map[idx]
+        return self._get(data)
 
-    def _merge(self):
-        if len(self.data_map) < len(self.pos_data_map) + len(self.neg_data_map):
-            self.data_map.clear()
-            for data in self.pos_data_map:
-                self.data_map.append(data)
-            for data in self.neg_data_map:
-                self.data_map.append(data)
+    def _get(self, data):
+        img = cv2.imread(data['img_path'])
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img, _ = clip_pic(img, data['region'])
+        img = resize_image(img, self.img_size, self.img_size)
+        return ImgData(img, data['label'])
+
+    def _construct_dataset(self):
+        dataset = VOCDetection(root=self.path, **self.info)
+        for idx in tqdm(range(len(dataset))):
+            img, target = dataset[idx]
+            img = np.array(img)  # RGB image
+            objects = target['annotation']['object']
+            data_path = os.path.join(self.path, 'VOCdevkit', target['annotation']['folder'],
+                                     'JPEGImages', target['annotation']['filename'])
+            if isinstance(objects, dict):
+                objects = [objects]
+            objects = self._parse_obj(objects, data_path)
+            self._parse_data(img, objects)
+
+    def _parse_obj(self, objects, data_path):
+        res_objs = list()
+        for obj in objects:
+            label = self.tokenizer(obj['name'])
+            if label < 0:
+                raise ValueError
+            bd_box = obj['bndbox']
+            bd_box = [bd_box['xmin'], bd_box['ymin'],
+                      bd_box['xmax'], bd_box['ymax']]
+            bd_box = [int(x) for x in bd_box]
+            res_objs.append(
+                {'path': data_path, 'label': label, 'bndbox': bd_box})
+        objects.clear()
+        return res_objs
+
+    def _parse_data(self, img, objects):
+        _, regions_pred = region_proposal(
+            img, self.img_size, require_img=False)
+        for region_pred in regions_pred:
+            pos_flag = False
+            neg_flag = False
+            for obj in objects:
+                region_gold = obj['bndbox']
+                iou_value = iou(region_gold, region_pred)
+                if iou_value < self.threshold:
+                    if not neg_flag and iou_value > 0:
+                        neg_flag = True
+                else:
+                    self.pos_data_map.append(
+                        {'img_path': obj['path'], 'label': obj['label'], 'region': region_pred})
+                    pos_flag = True
+            if not pos_flag and neg_flag:
+                self.neg_data_map.append(
+                    {'img_path': obj['path'], 'label': 0, 'region': region_pred})
+        for obj in objects:
+            w, h = obj['bndbox'][2] - \
+                obj['bndbox'][0], obj['bndbox'][3] - obj['bndbox'][1]
+            region_gold = [obj['bndbox'][0], obj['bndbox']
+                           [1], obj['bndbox'][2], obj['bndbox'][3], w, h]
+            self.pos_data_map.append(
+                {'img_path': obj['path'], 'label': obj['label'], 'region': region_gold})
+
+    def _save(self):
+        with open(self.region_path, 'w', encoding='utf-8') as f:
+            for data in tqdm(self.pos_data_map):
+                line = json.dumps(data) + '\n'
+                f.write(line)
+            for data in tqdm(self.neg_data_map):
+                line = json.dumps(data) + '\n'
+                f.write(line)
+            f.close()
 
     def _load_ckpt(self):
-        self.data_map = joblib.load(self.region_path)
-        for data in tqdm(self.data_map):
-            if data.label == 0:
-                self.neg_data_map.append(data)
-            elif data.label > 0:
-                self.pos_data_map.append(data)
-            else:
-                raise ValueError('Bad Data Label %s in Resuming.' % data.label)
+        with open(self.region_path, 'r', encoding='utf-8') as f:
+            for line in tqdm(f.readlines()):
+                line = line.strip()
+                data = json.loads(line)
+                if data['label'] == 0:
+                    self.neg_data_map.append(data)
+                elif data['label'] > 0:
+                    self.pos_data_map.append(data)
+                else:
+                    raise ValueError(
+                        'Bad Data Label %s in Resuming.' % data.label)
 
     def get_batch(self, batch_size: int = 128, pos_prop: int = 4) -> ImgBatch:
         batch_idx = self._get_batch_idx(batch_size, pos_prop)
@@ -260,16 +293,16 @@ class SVMDataset(Dataset):
         we also calculate the train data of bounding box regression in this part
     """
 
-    def __init__(self, cfg, sep=' ', file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer, sep=' ', file_ext='.jpg'):
         super(SVMDataset, self).__init__(
-            cfg, tokenizer=None, sep=sep, file_ext=file_ext)
+            cfg, tokenizer=tokenizer, sep=sep, file_ext=file_ext)
         self.bbox_map = list()
         self.feature_map = defaultdict(list)
         self.label_map = defaultdict(list)
         self.svm_threshold = cfg.threshold
         self.bbox_threshold = cfg.reg_threshold
-        self.svm_path = os.path.join(cfg.save_dir, 'svm.npy')
-        self.bbox_path = os.path.join(cfg.save_dir, 'box.npy')
+        self.svm_path = os.path.join(cfg.save_dir, 'svm.json')
+        self.bbox_path = os.path.join(cfg.save_dir, 'box.json')
         self.model = None
         if os.path.exists(self.svm_path) and os.path.exists(self.bbox_path):
             self._load_ckpt()
@@ -291,25 +324,47 @@ class SVMDataset(Dataset):
     def _load_ckpt(self):
         self.data_map = joblib.load(self.svm_path)
 
-    def _parse_data(self, raw_data) -> None:
-        data = raw_data.strip().split(self.sep)
-        assert len(data) == 3
+    def _construct_dataset(self):
+        dataset = VOCDetection(root=self.path, **self.info)
+        for idx in tqdm(range(len(dataset))):
+            img, target = dataset[idx]
+            img = np.array(img)  # RGB image
+            objects = target['annotation']['object']
+            if isinstance(objects, dict):
+                objects = [objects]
+            objects = self._parse_obj(objects)
+            self._parse_data(img, objects)
 
-        img_path = os.path.join(self.data_root, data[0])
-        try:
-            label_gold = int(data[1])
-        except:
-            label_gold = None
-        region_gold = data[2].split(',')
-        region_gold = [int(x) for x in region_gold]
+    def _parse_obj(self, objects):
+        res_objs = list()
+        for obj in objects:
+            label = self.tokenizer(obj['name'])
+            if label < 0:
+                raise ValueError
+            bd_box = obj['bndbox']
+            bd_box = [bd_box['xmin'], bd_box['ymin'],
+                      bd_box['xmax'], bd_box['ymax']]
+            bd_box = [int(x) for x in bd_box]
+            area = (bd_box[2]-bd_box[0]) * (bd_box[3]-bd_box[1]) / 5.0
+            res_objs.append({'label': label, 'bndbox': bd_box, 'area': area})
+        objects.clear()
+        return res_objs
 
-        images, regions_pred = region_proposal(image_path, self.img_size)
+    def _parse_data(self, img, objects) -> None:
+        images, regions_pred = region_proposal(img, self.img_size)
         for image, region_pred in zip(images, regions_pred):
-            iou_value = iou(region_gold, region_pred)
-            if iou_value < self.svm_threshold:
-                svm_label = 0
-            else:
-                svm_label = label_gold
+            neg_flag = False
+            area_pred = region_pred[4] * region_pred[5]
+            for obj in objects:
+                region_gold = obj['bndbox']
+                iou_value = iou(region_gold, region_pred)
+                if iou_value < self.threshold:
+                    if not neg_flag and iou_value > 0 and area_pred > obj['area']:
+                        neg_flag = True
+                else:
+                    break
+            if neg_flag:
+                self.neg_data_map.append((image, 0))
 
             bbox_label = self._calc_bbox(region_pred, region_gold)
             image = torch.Tensor([image]).permute(0, 3, 1, 2)
@@ -317,11 +372,8 @@ class SVMDataset(Dataset):
             feature, _ = self.model(image)
             feature = feature.data.cpu().numpy()
 
-            self.data_map.append(FeatureData(
-                label_gold, feature[0], svm_label))
-            self.bbox_map.append(FeatureData(label_gold, feature, bbox_label))
-
-        return None
+            self.data_map.append((label_gold, feature[0], svm_label))
+            self.bbox_map.append((label_gold, feature, bbox_label))
 
     def _calc_bbox(self, region_pred, region_gold, iou):
         box_label = np.zeros(5)
@@ -353,6 +405,6 @@ class RegDataset(Dataset):
         self._load_ckpt(cfg.save_dir)
 
     def _load_ckpt(self, dir):
-        path = os.path.join(dir, 'box.npy')
+        path = os.path.join(dir, 'box.json')
         assert os.path.exists(path)
         self.data_map = joblib.load(path)

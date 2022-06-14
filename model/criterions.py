@@ -5,7 +5,11 @@ import torch.nn.functional as F
 criterion = nn.CrossEntropyLoss()
 if torch.cuda.is_available():
     criterion.cuda()
-
+else:
+    try:
+        criterion.to('mps')
+    except Exception as e:
+        pass
 
 def CNNLoss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     loss = criterion(y_pred, y_true)

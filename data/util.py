@@ -4,7 +4,7 @@ import numpy as np
 from model.regoin_proposal import selective_search
 
 
-def region_proposal(img, img_size):
+def region_proposal(img, img_size, require_img=True):
     '''
     use selective-search to obtain image's region proposals;
     add some hand-crafted rules to refine proposals
@@ -29,11 +29,13 @@ def region_proposal(img, img_size):
         [a, b, c] = np.shape(proposal_img)
         if a == 0 or b == 0 or c == 0:
             continue
-        resized_proposal_img = resize_image(proposal_img, img_size, img_size)
         candidates.add(r['rect'])
-        img_float = np.asarray(resized_proposal_img, dtype="float32")
-        images.append(img_float)
         vertices.append(proposal_vertice)
+        if require_img:
+            resized_proposal_img = resize_image(
+                proposal_img, img_size, img_size)
+            img_float = np.asarray(resized_proposal_img, dtype="float32")
+            images.append(img_float)
     return images, vertices
 
 
@@ -109,13 +111,13 @@ def resize_image(in_image,
 
 def clip_pic(img, rect):
     '''
-
     :param img: input image
-    :param rect: four params of the rect
+    :param rect: params of rectangle, 
+    :can be (x_min, y_min, x_max, y_max, w, h) or (x_min, y_min, w, h)
     :return: the clipped image and the rect
     '''
-    assert len(rect) == 4
-    x_min, y_min, w, h = rect[0], rect[1], rect[2], rect[3]
+    assert len(rect) >= 4
+    x_min, y_min, w, h = rect[0], rect[1], rect[-2], rect[-1]
     x_max = x_min + w
     y_max = y_min + h
     return img[y_min:y_max, x_min:x_max, :], [x_min, y_min, x_max, y_max, w, h]

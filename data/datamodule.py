@@ -8,6 +8,21 @@ from data import dataset_factory, collate_factory
 from .tokenizer import Tokenizer
 
 
+class WarpDataLoader:
+    def __init__(self, dataset, batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return int(len(self.dataset) / self.batch_size) + 1
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.dataset.get_batch(batch_size=self.batch_size)
+
+
 class DataModule:
     def __init__(self, cfg, name):
         self.logger = logging.getLogger('%s-DataModule' % name)
@@ -54,7 +69,7 @@ class DataModule:
                               shuffle=cfg.shuffle
                               )
         else:
-            return dataset
+            return WarpDataLoader(dataset=dataset, batch_size=cfg.batch_size)
 
     def train_dataloader(self):
         return self._construct_loader(self.cfg.train, self.train_dataset)

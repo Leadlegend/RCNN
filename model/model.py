@@ -8,10 +8,9 @@ import torch.nn as nn
 
 class BaseModel(nn.Module):
 
-    def __init__(self, cfg, device='cpu'):
+    def __init__(self, cfg):
         super(BaseModel, self).__init__()
         self.cfg = cfg
-        self.device = device
         self.logger = logging.getLogger(cfg.name)
 
     def _construct_network(self):
@@ -22,3 +21,7 @@ class BaseModel(nn.Module):
 
     def forward(self, drug_input):
         raise NotImplementedError
+
+    def _save_checkpoint(self, path):
+        state_dict = self.state_dict()
+        torch.save(state_dict, path)
