@@ -16,8 +16,8 @@ class CNNModel(BaseModel):
         currently implemented AlexNet backend, which is default choice of R-CNN
     """
 
-    def __init__(self, cfg, device):
-        super(CNNModel, self).__init__(cfg, device)
+    def __init__(self, cfg):
+        super(CNNModel, self).__init__(cfg)
         self._construct_network()
         # self._init_weights()
 
@@ -39,7 +39,7 @@ class CNNModel(BaseModel):
         )
 
     def _construct_network(self):
-        logger.info('Constructing AlexNet Backend for CNN Part...')
+        self.logger.info('Constructing AlexNet Backend for CNN Part...')
         self._construct_feature_extractor()
         self.pool = nn.AdaptiveAvgPool2d((6, 6))
 
@@ -55,10 +55,10 @@ class CNNModel(BaseModel):
 
     def _init_weights(self, ckpt: Optional[str]):
         if ckpt is None or not ckpt.startswith('http'):
-            logger.error(
+            self.logger.error(
                 'Bad Checkpoint URL for Pre-Trained Model.', stack_info=True)
             raise ValueError
-        logger.info("Downloading Pre-Trained Model Params from %s" % ckpt)
+        self.logger.info("Downloading Pre-Trained Model Params from %s" % ckpt)
         state_dict = load_state_dict_from_url(
             ckpt, progress=True)
         current_state = self.state_dict()
@@ -87,17 +87,18 @@ class CNNModel(BaseModel):
 
 
 class FtCNNModel(CNNModel):
-    def __init__(self, cfg, device):
-        super(FtCNNModel, self).__init__(cfg, device)
+    def __init__(self, cfg):
+        super(FtCNNModel, self).__init__(cfg)
 
     def _init_weights(self, ckpt: str):
-        if not os.path.exists(ckpt):
-            logger.error(
-                'Bad Checkpoint Path for Supervised Pre-Trained Model.', stack_info=True)
-            raise ValueError
-        logger.info(
-            "Loading Checkpoint from Supervised Pre-Trained Model at %s" % ckpt)
-        ckpt = torch.load(ckpt)
+        if isinstance(ckpt, str):
+            if not os.path.exists(ckpt):
+                self.logger.error(
+                    'Bad Checkpoint Path for Supervised Pre-Trained Model.', stack_info=True)
+                raise ValueError
+            self.logger.info(
+                "Loading Checkpoint from Supervised Pre-Trained Model at %s" % ckpt)
+            ckpt = torch.load(ckpt)
         if 'state_dict' in ckpt:
             ckpt = ckpt['state_dict']
         # Robust process for various kinds of checkpoint

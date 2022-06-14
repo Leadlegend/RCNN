@@ -8,8 +8,8 @@ from .model import BaseModel
 
 
 class RegModel(BaseModel):
-    def __init__(self, cfg, device):
-        super(RegModel, self).__init__(cfg, device)
+    def __init__(self, cfg):
+        super(RegModel, self).__init__(cfg)
         self._construct_network()
 
     def _construct_network(self):

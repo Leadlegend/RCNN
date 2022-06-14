@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass
 class ImgBatch:
-    datas: torch.Tensor
+    datas: torch.Tensor  # [batch_size, img_size, img_size, 3]
     labels: Optional[torch.Tensor] = None
 
     def __getitem__(self, idx: int):
@@ -26,7 +26,8 @@ class ImgBatch:
 def alex_collate_fn(batch, labeled: bool = True):
     if labeled:
         imgs, labels = trivial_collate_fn(batch)
-        imgs, labels = torch.Tensor(imgs, dtype=float32), torch.Tensor(labels).int().squeeze_()
+        imgs, labels = torch.from_numpy(
+            imgs).float().permute(0, 3, 1, 2), torch.Tensor(labels).int()
         return ImgBatch(imgs, labels)
     else:
         imgs = trivial_collate_fn(batch)
@@ -38,6 +39,7 @@ def alex_collate_fn(batch, labeled: bool = True):
 
 def ft_collate_fn(batch):
     return alex_collate_fn(batch, labeled=True)
+
 
 def reg_collate_fn(batch):
     _, features, labels = trivial_collate_fn(batch)
@@ -61,7 +63,10 @@ def trivial_collate_fn(batch):
     sdata = batch[0]
     for idx in range(len(sdata)):
         data_item = sdata[idx]
-        data_size = [batch_size] + list(data_item.shape)
+        try:
+            data_size = [batch_size] + list(data_item.shape)
+        except:
+            data_size = [batch_size]
         batch_item = np.zeros(data_size)
         mini_batch.append(batch_item)
 

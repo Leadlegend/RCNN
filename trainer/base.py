@@ -5,6 +5,8 @@ import logging
 import subprocess
 import numpy as np
 
+from tqdm import tqdm
+
 
 class Trainer:
 
@@ -34,7 +36,6 @@ class Trainer:
         self.save_dir = config.save_dir
         self.ckpt = config.ckpt
         self.epochs = config.epoch
-        self.steps_num = steps_per_epoch
 
         # setup visualization writer instance
         self.logger = logging.getLogger('Trainer')
@@ -53,19 +54,16 @@ class Trainer:
                                  self.save_dir)
 
         if self.ckpt is None:
-            logger.warning(
+            self.logger.warning(
                 'The model is not initialized, please make sure if you are running Regression')
         else:
-            logger.info(
+            self.logger.info(
                 'Initializing the model with checkpoint at %s' % self.ckpt)
-            self.model._resume_checkpoint(self.ckpt)
+            self._resume_checkpoint(self.ckpt)
 
     def train(self):
         for epoch in range(self.start_epoch, self.epochs + 1):
-            if self.steps_num is not None and self.steps_num > 0:
-                result = self._train_bystep(epoch)
-            else:
-                result = self._train_epoch(epoch)
+            result = self._train_epoch(epoch)
 
             # save logged informations into log dict
             log = {'epoch': epoch}
@@ -81,11 +79,13 @@ class Trainer:
     def _train_epoch(self, epoch):
         self.model.train()
         log = dict()
-        for batch_idx, (data, label) in enumerate(self.data_loader):
-            data, label = data.to(self.device), label.to(self.device)
+        for batch_idx, batch in enumerate(tqdm(self.data_loader)):
+            data, label = batch.to(self.device)
 
             self.optimizer.zero_grad()
             output = self.model(data)
+            if isinstance(output, tuple):
+                _, output = output
             loss = self.criterion(output, label)
             loss.backward()
             self.optimizer.step()
@@ -113,32 +113,6 @@ class Trainer:
                 output = self.model(data)
                 loss = self.criterion(output, target)
                 log.update({str(batch_idx): loss.item()})
-        return log
-
-    def _train_bystep(self, epoch):
-        self.model.train()
-        log = dict()
-        for batch_idx in range(self.steps_num):
-            data, label = self.data_loader.get_batch()
-            data, label = data.to(self.device), label.to(self.device)
-
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, label)
-            loss.backward()
-            self.optimizer.step()
-
-            log.update({str(batch_idx): loss.item()})
-            if batch_idx % self.log_step == 0:
-                self.logger.info('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch, self._progress(batch_idx), loss.item()))
-
-        if self.do_validation:
-            val_log = self._valid_epoch(epoch)
-            log.update(**{'val_' + k: v for k, v in val_log.items()})
-
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
         return log
 
     def _progress(self, batch_idx):
@@ -172,8 +146,7 @@ class Trainer:
         checkpoint = str(resume_path)
         self.logger.info("Loading checkpoint: {} ...".format(resume_path))
         if os.path.exists(checkpoint):
-            checkpoint = torch.load(checkpoint,
-                                    map_location=torch.device(self.device))
+            checkpoint = torch.load(checkpoint)
             # we should make resume process robust to use various kinds of ckpt
             if 'epoch' in checkpoint:
                 self.start_epoch = checkpoint['epoch'] + 1
@@ -190,10 +163,11 @@ class Trainer:
                         Please ensure you use the same configuration before resuming training.',
                         stack_info=True)
             else:
-                logger.info('Loading Model Params from Previous Training Step')
+                self.logger.info(
+                    'Loading Model Params from Previous Training Step')
                 self.model._init_weights(checkpoint)
         else:
-            logger.info('Loading Model Params with URL.')
+            self.logger.info('Loading Model Params with URL.')
             self.model._init_weights(checkpoint)
 
         self.logger.info(
