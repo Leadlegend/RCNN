@@ -12,3 +12,4 @@ data/cross_valid/
 .vscode
 train_data/
 test_data/
+valid_data/
