@@ -1,3 +1,4 @@
+import os
 import torch
 import hydra
 
@@ -9,15 +10,10 @@ from config import args_util, init_optimizer
 
 
 def train(cfg):
-    datamodule = DataModule(cfg=cfg.data, name=cfg.name)
-    train_loader, val_loader = datamodule.train_dataloader(), datamodule.val_dataloader()
     model = model_factory[cfg.name](cfg.model)
-    criterion = criterion_factory[cfg.name]
-    optim, sched = init_optimizer(cfg.trainer, model)
-    trainer = Trainer(model=model, config=cfg.trainer, device=cfg.trainer.device,
-                      data_loader=train_loader, valid_data_loader=val_loader,
-                      optimizer=optim, lr_scheduler=sched, criterion=criterion)
-    trainer.train()
+    model._init_weights(cfg.trainer.ckpt)
+    path = os.path.join(cfg.trainer.save_dir, 'pre-trained.pt')
+    model._save_checkpoint(path)
 
 
 @hydra.main(config_path='./config', config_name='train_step1')
