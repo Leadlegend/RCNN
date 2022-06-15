@@ -53,6 +53,7 @@ class BaseDataset(Dataset):
         super().__init__()
         self.ext = file_ext
         self.img_size = cfg.img_size
+        self.context_size = cfg.context
         self.data_map = list()
         self.tokenizer = tokenizer
         self.path: Union[str, List[str]] = cfg.path
@@ -176,7 +177,7 @@ class FtDataset(BaseDataset):
     def _get(self, data):
         img = cv2.imread(data['img_path'])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img, _ = clip_pic(img, data['region'])
+        img, _ = clip_pic(img, data['region'], context=self.context_size)
         img = resize_image(img, self.img_size, self.img_size)
         return ImgData(img, data['label'])
 
@@ -261,7 +262,6 @@ class FtDataset(BaseDataset):
     def get_batch(self, batch_size: int = 128, pos_prop: int = 4) -> ImgBatch:
         batch_idx = self._get_batch_idx(batch_size, pos_prop)
         batch = [self[id] for id in batch_idx]
-
         return ft_collate_fn(batch)
 
     def _get_batch_idx(self, batch_size: int = 128, pos_prop: int = 4):
@@ -280,7 +280,8 @@ class FtDataset(BaseDataset):
                 nidx = next(self.neg_iter)
             except StopIteration:
                 self.neg_iter = iter(self.neg_sampler)
-                nidx = next(self.neg_iter) + self.pos_num
+                nidx = next(self.neg_iter)
+            nidx += self.pos_num
             batch_idx.append(nidx)
         return batch_idx
 
@@ -293,9 +294,9 @@ class SVMDataset(Dataset):
         we also calculate the train data of bounding box regression in this part
     """
 
-    def __init__(self, cfg, tokenizer, sep=' ', file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer, file_ext='.jpg'):
         super(SVMDataset, self).__init__(
-            cfg, tokenizer=tokenizer, sep=sep, file_ext=file_ext)
+            cfg, tokenizer=tokenizer, file_ext=file_ext)
         self.bbox_map = list()
         self.feature_map = defaultdict(list)
         self.label_map = defaultdict(list)

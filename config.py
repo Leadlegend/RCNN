@@ -53,6 +53,7 @@ class DatasetConfig:
     workers: Optional[int] = 0
     lazy: Optional[bool] = False
     label: Optional[bool] = True
+    context: Optional[int] = 0
 
 
 @dataclass
