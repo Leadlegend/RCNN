@@ -33,6 +33,9 @@ class Tokenizer:
         self.reverse_vocab = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocab.items()])
 
+    def __len__(self):
+        return len(self.vocab)
+
     def __call__(self, obj):
         if isinstance(obj, str):
             return self._convert_token_to_id(obj)

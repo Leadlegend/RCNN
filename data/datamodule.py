@@ -24,7 +24,7 @@ class WarpDataLoader:
 
 
 class DataModule:
-    def __init__(self, cfg, name):
+    def __init__(self, cfg, name, idx: int = -1):
         self.logger = logging.getLogger('%s-DataModule' % name)
         self.cfg = cfg
         self.name = name
@@ -35,25 +35,28 @@ class DataModule:
         self._collate_fn = collate_factory[name]
         self.epoch_flag = (name in ['alex', 'reg'])
         self.train_dataset, self.val_dataset, self.test_dataset = None, None, None
-        self.setup()
+        if idx > 0:
+            self.setup(idx)
+        else:
+            self.setup()
 
-    def setup(self):
+    def setup(self, idx=None):
         if self.cfg.train is not None:
             self.logger.info("Constructing Train Data...")
             self.train_dataset = self._dataset(
-                self.cfg.train, tokenizer=self.tokenizer)
+                self.cfg.train, tokenizer=self.tokenizer, idx=idx)
         else:
             self.logger.warning('No Valid Train Data.')
         if self.cfg.val is not None:
             self.logger.info("Constructing Validation Data...")
             self.val_dataset = self._dataset(
-                self.cfg.val, tokenizer=self.tokenizer)
+                self.cfg.val, tokenizer=self.tokenizer, idx=idx)
         else:
             self.logger.warning('No Valid Val Data.')
         if self.cfg.test is not None:
             self.logger.info("Constructing Test Data...")
             self.test_dataset = self._dataset(
-                self.cfg.test, tokenizer=self.tokenizer)
+                self.cfg.test, tokenizer=self.tokenizer, idx=idx)
         else:
             self.logger.warning('No Valid Test Data.')
 

@@ -2,7 +2,6 @@ import os
 import cv2
 import json
 import torch
-import joblib
 import numpy as np
 
 from tqdm import tqdm
@@ -49,8 +48,9 @@ class FeatureData:
 
 
 class BaseDataset(Dataset):
-    def __init__(self, cfg, tokenizer: Optional[Tokenizer] = None, file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer: Optional[Tokenizer] = None, file_ext='.jpg', idx=None):
         super().__init__()
+        self.idx = idx
         self.ext = file_ext
         self.img_size = cfg.img_size
         self.context_size = cfg.context
@@ -286,7 +286,7 @@ class FtDataset(BaseDataset):
         return batch_idx
 
 
-class SVMDataset(Dataset):
+class SVMDataset(BaseDataset):
     """
         target data format: line[img_path rec_label rec_bbox]
         where label is of regoin-level
@@ -294,36 +294,64 @@ class SVMDataset(Dataset):
         we also calculate the train data of bounding box regression in this part
     """
 
-    def __init__(self, cfg, tokenizer, file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer, idx, file_ext='.jpg'):
         super(SVMDataset, self).__init__(
-            cfg, tokenizer=tokenizer, file_ext=file_ext)
-        self.bbox_map = list()
-        self.feature_map = defaultdict(list)
-        self.label_map = defaultdict(list)
+            cfg, tokenizer=tokenizer, file_ext=file_ext, idx=idx)
+        self.info = cfg.info
+        self.data_map = defaultdict(list)
+        self.pos_data_map, self.neg_data_map = list(), list()
         self.svm_threshold = cfg.threshold
-        self.bbox_threshold = cfg.reg_threshold
-        self.svm_path = os.path.join(cfg.save_dir, 'svm.json')
-        self.bbox_path = os.path.join(cfg.save_dir, 'box.json')
-        self.model = None
-        if os.path.exists(self.svm_path) and os.path.exists(self.bbox_path):
+        self.svm_path = os.path.join(cfg.save_dir, 'svm')
+        if not os.path.exists(self.svm_path):
+            os.makedirs(self.svm_path)
+        self.svm_file_name = [
+            str(x) + '.json' for x in range(len(self.tokenizer))]
+        if os.path.exists(os.path.join(self.svm_path, self.svm_file_name[idx])):
             self._load_ckpt()
-            self._init_map()
         else:
             self._construct_dataset()
-            joblib.save(self.data_map, self.svm_path)
-            joblib.save(self.bbox_map, self.bbox_path)
-            self._init_map()
+            self._save_and_clear()
 
-    def _init_map(self):
-        self.bbox_map.clear()
-        self.feature_map.clear()
-        self.label_map.clear()
-        for data in tqdm(self.data_map):
-            self.feature_map[data[0]].append(data[1])
-            self.label_map[data[0]].append(data[2])
+    @property
+    def pos_num(self):
+        return len(self.pos_data_map)
+
+    @property
+    def neg_num(self):
+        return len(self.neg_data_map)
+
+    def __len__(self):
+        return self.pos_num + self.neg_num
 
     def _load_ckpt(self):
-        self.data_map = joblib.load(self.svm_path)
+        self.svm_file_name = [self.svm_file_name[0], self.svm_file_name[idx]]
+        for idx, svm_file in enumerate(self.svm_file_name):
+            svm_path = os.path.join(self.svm_path, svm_file)
+            if not os.path.exists(svm_path):
+                raise ValueError('Bad Data Path %s' % svm_path)
+            with open(svm_path, 'r', encoding='utf-8'):
+                for line in tqdm(f.readlines()):
+                    data = json.loads(line.strip())
+                    if idx:
+                        self.pos_data_map.append(data)
+                    else:
+                        self.neg_data_map.append(data)
+                f.close()
+
+    def _save_and_clear(self):
+        for svm_file, svm_data in self.data_map.items():
+            svm_path = os.path.join(self.svm_path, svm_file)
+            with open(svm_path, 'w', encoding='utf-8') as f:
+                for data in svm_data:
+                    line = json.dumps(data) + '\n'
+                    f.write(line)
+                f.close()
+            if svm_file.startswith(str(self.idx)):
+                self.pos_data_map = svm_data
+            elif svm_file.startswith('0'):
+                self.neg_data_map = svm_data
+            else:
+                svm_data.clear()
 
     def _construct_dataset(self):
         dataset = VOCDetection(root=self.path, **self.info)
@@ -331,12 +359,14 @@ class SVMDataset(Dataset):
             img, target = dataset[idx]
             img = np.array(img)  # RGB image
             objects = target['annotation']['object']
+            data_path = os.path.join(self.path, 'VOCdevkit', target['annotation']['folder'],
+                                     'JPEGImages', target['annotation']['filename'])
             if isinstance(objects, dict):
                 objects = [objects]
-            objects = self._parse_obj(objects)
+            objects = self._parse_obj(objects, data_path)
             self._parse_data(img, objects)
 
-    def _parse_obj(self, objects):
+    def _parse_obj(self, objects, data_path):
         res_objs = list()
         for obj in objects:
             label = self.tokenizer(obj['name'])
@@ -346,35 +376,64 @@ class SVMDataset(Dataset):
             bd_box = [bd_box['xmin'], bd_box['ymin'],
                       bd_box['xmax'], bd_box['ymax']]
             bd_box = [int(x) for x in bd_box]
-            area = (bd_box[2]-bd_box[0]) * (bd_box[3]-bd_box[1]) / 5.0
-            res_objs.append({'label': label, 'bndbox': bd_box, 'area': area})
+            res_objs.append(
+                {'path': data_path, 'label': label, 'bndbox': bd_box})
         objects.clear()
         return res_objs
 
     def _parse_data(self, img, objects) -> None:
-        images, regions_pred = region_proposal(img, self.img_size)
-        for image, region_pred in zip(images, regions_pred):
-            neg_flag = False
-            area_pred = region_pred[4] * region_pred[5]
+        _, regions_pred = region_proposal(
+            img, self.img_size, require_img=False)
+        for region_pred in regions_pred:
+            neg_flag = True
             for obj in objects:
                 region_gold = obj['bndbox']
                 iou_value = iou(region_gold, region_pred)
-                if iou_value < self.threshold:
-                    if not neg_flag and iou_value > 0 and area_pred > obj['area']:
-                        neg_flag = True
+                if iou_value > self.svm_threshold:
+                    neg_flag = False
                 else:
-                    break
+                    continue
             if neg_flag:
-                self.neg_data_map.append((image, 0))
+                self.data_map[self.svm_file_name[0]].append(
+                    {'img_path': obj['path'], 'label': 0, 'region': region_pred})
+        for obj in objects:
+            label_idx = obj['label']
+            w, h = obj['bndbox'][2] - \
+                obj['bndbox'][0], obj['bndbox'][3] - obj['bndbox'][1]
+            region_gold = [obj['bndbox'][0], obj['bndbox']
+                           [1], obj['bndbox'][2], obj['bndbox'][3], w, h]
+            self.data_map[self.svm_file_name[label_idx]].append(
+                {'img_path': obj['path'],
+                    'label': obj['label'], 'region': region_gold}
+            )
 
-            bbox_label = self._calc_bbox(region_pred, region_gold)
-            image = torch.Tensor([image]).permute(0, 3, 1, 2)
+    def __getitem__(self, idx):
+        if idx >= self.pos_num + self.neg_num:
+            raise IndexError('Illegal Dataset Index %s' % idx)
+        elif idx < self.pos_num:
+            data = self.pos_data_map[idx]
+        else:
+            idx -= len(self.pos_data_map)
+            data = self.neg_data_map[idx]
+        return self._get(data)
 
-            feature, _ = self.model(image)
-            feature = feature.data.cpu().numpy()
+    def _get(self, data):
+        img = cv2.imread(data['img_path'])
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img, _ = clip_pic(img, data['region'], context=self.context_size)
+        img = resize_image(img, self.img_size, self.img_size)
+        return ImgData(img, data['label'])
 
-            self.data_map.append((label_gold, feature[0], svm_label))
-            self.bbox_map.append((label_gold, feature, bbox_label))
+
+class RegDataset(Dataset):
+    def __init__(self, cfg):
+        super(RegDataset, self).__init__(cfg, tokenizer=None)
+        self._load_ckpt(cfg.save_dir)
+
+    def _load_ckpt(self, dir):
+        path = os.path.join(dir, 'box.json')
+        assert os.path.exists(path)
+        self.data_map = joblib.load(path)
 
     def _calc_bbox(self, region_pred, region_gold, iou):
         box_label = np.zeros(5)
@@ -395,17 +454,3 @@ class SVMDataset(Dataset):
         else:
             box_label[0] = 1
         return box_label
-
-    def __getitem__(self, idx):
-        return self.feature_map[idx], self.label_map[idx]
-
-
-class RegDataset(Dataset):
-    def __init__(self, cfg):
-        super(RegDataset, self).__init__(cfg, tokenizer=None)
-        self._load_ckpt(cfg.save_dir)
-
-    def _load_ckpt(self, dir):
-        path = os.path.join(dir, 'box.json')
-        assert os.path.exists(path)
-        self.data_map = joblib.load(path)
