@@ -3,9 +3,12 @@ info:
   year: '2012'
   image_set: trainval
   download: false
+batch_size: 128
 pin: false
-lazy: false
+shuffle: true
 img_size: 227
 threshold: 0.3
+context: 16
+workers: 4
 reg_threshold: 0.6
 save_dir: ../../train_data/generate/

@@ -16,7 +16,7 @@ cfg2sch = {
     "None":
     None,
     "Step":
-    partial(opt.lr_scheduler.StepLR, step_size=7, gamma=0.1),
+    partial(opt.lr_scheduler.StepLR, step_size=4, gamma=0.1),
     "Plateau":
     partial(
         opt.lr_scheduler.ReduceLROnPlateau,
@@ -24,7 +24,7 @@ cfg2sch = {
         mode='min',
         patience=10,
         cooldown=3,
-        min_lr=1e-7,
+        min_lr=2e-6,
     ),
 }
 

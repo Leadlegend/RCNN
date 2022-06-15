@@ -1,0 +1,6 @@
+defaults:
+  - base_model
+  - _self_
+
+output_size: 21
+name: finetune
