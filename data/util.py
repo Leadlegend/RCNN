@@ -109,7 +109,7 @@ def resize_image(in_image,
     return img
 
 
-def clip_pic(img, rect):
+def clip_pic(img, rect, context: int = 0):
     '''
     :param img: input image
     :param rect: params of rectangle, 
@@ -120,4 +120,12 @@ def clip_pic(img, rect):
     x_min, y_min, w, h = rect[0], rect[1], rect[-2], rect[-1]
     x_max = x_min + w
     y_max = y_min + h
+    if context is not None and context > 0:
+        imgh, imgw = img.shape[0], img.shape[1]
+        x_max = min(x_max + context, imgw)
+        y_max = min(y_max+ context, imgh)
+        x_min = max(0, x_min - context)
+        y_min = max(0, y_min - context)
+        h, w = y_max-y_min, x_max-x_min
+
     return img[y_min:y_max, x_min:x_max, :], [x_min, y_min, x_max, y_max, w, h]
