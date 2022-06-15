@@ -27,13 +27,13 @@ def alex_collate_fn(batch, labeled: bool = True):
     if labeled:
         imgs, labels = trivial_collate_fn(batch)
         imgs, labels = torch.from_numpy(
-            imgs).float().permute(0, 3, 1, 2), torch.Tensor(labels).int()
+            imgs).float().permute(0, 3, 1, 2), torch.LongTensor(labels)
         return ImgBatch(imgs, labels)
     else:
         imgs = trivial_collate_fn(batch)
         if isinstance(imgs, tuple):
             imgs = imgs[0]
-        imgs = torch.Tensor(imgs, dtype=float32)
+        imgs = torch.from_numpy(imgs).float()
         return ImgBatch(imgs, None)
 
 
@@ -44,8 +44,8 @@ def ft_collate_fn(batch):
 def reg_collate_fn(batch):
     _, features, labels = trivial_collate_fn(batch)
     features, labels = torch.Tensor(
-        features, dtype=float32), torch.Tensor(labels).int().squeeze_()
-    return d.ImgBatch(features, labels)
+        features, dtype=torch.float32), torch.Tensor(labels).int().squeeze_()
+    return ImgBatch(features, labels)
 
 
 def trivial_collate_fn(batch):

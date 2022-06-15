@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 import logging
-import subprocess
 import numpy as np
 
 from tqdm import tqdm
@@ -36,6 +35,7 @@ class Trainer:
         self.save_dir = config.save_dir
         self.ckpt = config.ckpt
         self.epochs = config.epoch
+        self.step_per_epoch = len(self.data_loader)
 
         # setup visualization writer instance
         self.logger = logging.getLogger('Trainer')
@@ -48,7 +48,7 @@ class Trainer:
                 'Bad checkpoint save directory %s, try to create it.' %
                 self.save_dir)
             try:
-                subprocess.run('mkdir -p %s' % self.save_dir)
+                os.makedirs(self.save_dir)
             except:
                 raise ValueError('Cannot create directory %s' %
                                  self.save_dir)
@@ -92,15 +92,19 @@ class Trainer:
 
             log.update({str(batch_idx): loss.item()})
             if batch_idx % self.log_step == 0:
-                self.logger.info('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch, self._progress(batch_idx), loss.item()))
+                self.logger.info('Train Epoch: {} {}\t|\t Lr: {:.6f}\t|\tLoss: {:.6f}'.format(
+                    epoch, self._progress(batch_idx), self.optimizer.param_groups[0]['lr'], loss.item()))
+
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step(loss)
+
+            if batch_idx >= self.step_per_epoch:
+                break
 
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
             log.update(**{'val_' + k: v for k, v in val_log.items()})
 
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
         return log
 
     def _valid_epoch(self, epoch):
@@ -117,15 +121,12 @@ class Trainer:
 
     def _progress(self, batch_idx):
         base = '[{}/{} ({:.0f}%)]'
-        if hasattr(self.data_loader, 'n_samples') and self.steps_num is None:
+        if hasattr(self.data_loader, 'n_samples'):
             current = batch_idx * self.data_loader.batch_size
             total = self.data_loader.n_samples
-        elif self.steps_num is None:
-            current = batch_idx
-            total = self.len_epoch
         else:
             current = batch_idx
-            total = self.steps_num
+            total = len(self.data_loader)
         return base.format(current, total, 100.0 * current / total)
 
     def _save_checkpoint(self, epoch):
