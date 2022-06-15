@@ -20,11 +20,11 @@ cfg2sch = {
     "Plateau":
     partial(
         opt.lr_scheduler.ReduceLROnPlateau,
-        factor=0.9,
+        factor=0.93,
         mode='min',
-        patience=9,
-        cooldown=2,
-        min_lr=2e-5,
+        patience=10,
+        cooldown=3,
+        min_lr=1e-7,
     ),
 }
 
@@ -42,7 +42,7 @@ def init_optimizer(cfg, model):
 class DatasetConfig:
     save_dir: str
     path: Union[List[str], str]
-    info : Optional[dict] = None
+    info: Optional[dict] = None
     data_root: Optional[str] = None
     img_size: int = 227
     threshold: Optional[float] = 0.5
@@ -96,11 +96,13 @@ class Config:
     logger: LoggerConfig
     model: Optional[ModelConfig]
 
+
 """
 @hydra.main(config_path='../config', config_name='base')
 def main(cfg: Config):
     return cfg
 """
+
 
 def args_util():
     """
