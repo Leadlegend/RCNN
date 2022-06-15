@@ -25,3 +25,19 @@ def RegLoss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
 
     loss = no_object_loss + object_loss + reg_loss
     return loss
+
+
+def HingeLoss(y_pred, y_true):
+    # y_pred: [batch_size, num_class]
+    # y_true: [batch_size, ]
+    num_true = y_true.shape[0]
+    corrects = y_pred[range(num_true), y_true].unsqueeze(0).T
+
+    margin = 1.0
+    margins = y_pred - corrects + margin
+    loss = torch.sum(torch.max(margins, 1)[0]) / len(y_true)
+
+    # regressions
+    # reg = 1e-3
+    # loss += reg * torch.sum(weight ** 2)
+    return loss

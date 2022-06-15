@@ -1,7 +1,7 @@
 from .svm import SVMModel
 from .cnn import CNNModel, FtCNNModel
 from .reg import RegModel
-from .criterions import CNNLoss, RegLoss
+from .criterions import CNNLoss, RegLoss, HingeLoss
 
 model_factory = {
     'svm': SVMModel,
@@ -13,6 +13,6 @@ model_factory = {
 criterion_factory = {
     'alex': CNNLoss,
     'finetune': CNNLoss,
-    'svm': None,
+    'svm': HingeLoss,
     'reg': RegLoss,
 }
