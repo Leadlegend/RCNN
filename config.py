@@ -75,6 +75,7 @@ class TrainerConfig:
     # model initialization or checkpoint resuming
     optimizer: Optional[str] = 'sgd'  # optimizer name
     scheduler: Optional[str] = 'Step'  # lr_scheduler name
+    neg_prop: Optional[int] = 3
 
 
 @dataclass

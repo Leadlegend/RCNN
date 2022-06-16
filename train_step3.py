@@ -2,21 +2,20 @@ import torch
 import hydra
 
 from logger import setup_logging
-from trainer.base import Trainer
+from trainer.svm import SvmTrainer
 from data.datamodule import DataModule
 from model import model_factory, criterion_factory
 from config import args_util, init_optimizer
 
 
-def train(cfg):
-    datamodule = DataModule(cfg=cfg.data, name=cfg.name)
-    train_loader, val_loader = datamodule.train_dataloader(), datamodule.val_dataloader()
-    model = model_factory[cfg.name](cfg.model)
+def train(cfg, idx: int, cnn):
+    datamodule = DataModule(cfg=cfg.data, name=cfg.name, idx=idx)
+    model = model_factory[cfg.name](cfg.model, class_idx=idx)
     criterion = criterion_factory[cfg.name]
     optim, sched = init_optimizer(cfg.trainer, model)
-    trainer = Trainer(model=model, config=cfg.trainer, device=cfg.trainer.device,
-                              data_loader=train_loader, valid_data_loader=val_loader,
-                              optimizer=optim, lr_scheduler=sched, criterion=criterion)
+    trainer = SvmTrainer(feature_model=cnn, svm_model=model, config=cfg.trainer, device=cfg.trainer.device,
+                         data_module=datamodule, criterion=criterion,
+                         optimizer=optim, lr_scheduler=sched)
     trainer.train()
 
 
@@ -26,7 +25,12 @@ def main(configs):
                   log_config=configs.logger.cfg_path,
                   file_name=configs.name+'.log')
     torch.set_printoptions(precision=5)
-    train(cfg=configs)
+    svm_num = configs.model.output_size - 1
+    CNNModel = model_factory[configs.model.name](configs.model)
+    CNNModel.load_state_dict(torch.load(configs.trainer.ckpt))
+    configs.trainer.ckpt = None
+    for idx in range(1, svm_num + 1):
+        train(cfg=configs, idx=idx, cnn=CNNModel)
 
 
 if __name__ == '__main__':

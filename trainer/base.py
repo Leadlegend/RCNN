@@ -1,5 +1,4 @@
 import os
-import sys
 import torch
 import logging
 import numpy as np
@@ -17,8 +16,8 @@ class Trainer:
                  device,
                  data_loader,
                  valid_data_loader=None,
-                 steps_per_epoch=None,
-                 lr_scheduler=None):
+                 lr_scheduler=None,
+                 log_step=None):
         self.config = config
         self.device = device
         self.model = model.to(device)
@@ -26,7 +25,6 @@ class Trainer:
         self.optimizer = optimizer
 
         self.data_loader = data_loader
-        self.len_epoch = len(self.data_loader)
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
@@ -35,11 +33,10 @@ class Trainer:
         self.save_dir = config.save_dir
         self.ckpt = config.ckpt
         self.epochs = config.epoch
-        self.step_per_epoch = len(self.data_loader)
 
         # setup visualization writer instance
         self.logger = logging.getLogger('Trainer')
-        self.log_step = int(np.sqrt(len(data_loader)))
+        self.log_step = log_step if isinstance(log_step, int) else int(np.sqrt(len(data_loader)))
         self.logger.info('Logger Trainer will report info every %d steps' %
                          self.log_step)
 
@@ -55,7 +52,7 @@ class Trainer:
 
         if self.ckpt is None:
             self.logger.warning(
-                'The model is not initialized, please make sure if you are running Regression')
+                'The model is not initialized, please make sure if you are training Regression or SVM')
         else:
             self.logger.info(
                 'Initializing the model with checkpoint at %s' % self.ckpt)
@@ -71,7 +68,7 @@ class Trainer:
 
             # print logged informations to the screen
             for key, value in log.items():
-                self.logger.debug('{:15s}: {}'.format(str(key), value))
+                self.logger.debug('{:8s}: {}'.format(str(key), value))
 
             if epoch % self.save_period == 0:
                 self._save_checkpoint(epoch)
@@ -79,6 +76,7 @@ class Trainer:
     def _train_epoch(self, epoch):
         self.model.train()
         log = dict()
+        len_epoch = len(self.data_loader)
         for batch_idx, batch in enumerate(tqdm(self.data_loader)):
             data, label = batch.to(self.device)
 
@@ -98,7 +96,7 @@ class Trainer:
                 if self.lr_scheduler is not None:
                     self.lr_scheduler.step(loss)
 
-            if batch_idx >= self.step_per_epoch:
+            if batch_idx >= len_epoch:
                 break
 
         if self.do_validation:
@@ -111,8 +109,8 @@ class Trainer:
         self.model.eval()
         log = dict()
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
+            for batch_idx, batch in enumerate(self.valid_data_loader):
+                data, target = batch.to(self.device)
 
                 output = self.model(data)
                 loss = self.criterion(output, target)
