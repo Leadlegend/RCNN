@@ -79,7 +79,10 @@ class DataModule:
         return self._construct_loader(self.cfg.train, self.train_dataset, sampler=sampler)
 
     def val_dataloader(self, sampler=None):
-        return self._construct_loader(self.cfg.val, self.val_dataset, sampler=sampler, flag=True)
+        if self.val_dataset is not None:
+            return self._construct_loader(self.cfg.val, self.val_dataset, sampler=sampler, flag=True)
+        else:
+            return self._construct_loader(self.cfg.val, self.train_dataset, sampler=sampler)
 
     def test_dataloader(self):
         return self._construct_loader(self.cfg.test, self.test_dataset, flag=True)
