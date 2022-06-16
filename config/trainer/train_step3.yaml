@@ -9,3 +9,4 @@ save_period: 0
 ckpt: ../../ckpt/step2/ckpt-best.pt
 optimizer: sgd
 scheduler: Step
+neg_prop: 3

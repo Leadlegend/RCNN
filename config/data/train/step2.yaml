@@ -6,6 +6,7 @@ info:
 batch_size: 128
 pin: false
 workers: 16
+context: 16
 img_size: 227
 threshold: 0.5
 save_dir: ../../train_data/generate/
