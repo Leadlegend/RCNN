@@ -38,7 +38,7 @@ class SvmTrainer(Trainer):
         self._overall_indices = set(
             range(len(self.data_module.train_dataset)))
         self.pos_size = self.data_module.train_dataset.pos_num
-        self.neg_size = pos_num * self.config.neg_prop
+        self.neg_size = self.pos_size * self.config.neg_prop
         pos_idx, neg_idx = self.data_module.train_dataset.init_sampler_indices(
             self.neg_size)
         self._current_train_indices = pos_idx + neg_idx
@@ -48,7 +48,7 @@ class SvmTrainer(Trainer):
             self._current_train_indices, require_val=True)
         self.data_loader = self.data_module.train_dataloader(
             sampler=sampler)
-        self.val_data_loader = self.data_module.val_dataloader(
+        self.val_data_loader = self.data_module.train_dataloader(
             sampler=val_sampler)
         self.logger.info('DataLoader Building Done, Start Training...')
 
@@ -61,7 +61,7 @@ class SvmTrainer(Trainer):
         sampler, val_sampler = self.build_subset_sampler(
             self._current_train_indices, require_val=True)
         self.data_loader = self.data_module.train_dataloader(sampler=sampler)
-        self.val_data_loader = self.data_module.val_dataloader(
+        self.val_data_loader = self.data_module.train_dataloader(
             sampler=val_sampler)
         self.logger.info('DataLoader Building Done, Start Training...')
 
@@ -97,6 +97,7 @@ class SvmTrainer(Trainer):
             output = self.svm(feature)
             loss = self.criterion(output, label)
             loss.backward()
+            self.optimizer.step()
 
             log.update({str(batch_idx): loss.item()})
             if batch_idx % self.log_step == 0:
@@ -107,6 +108,7 @@ class SvmTrainer(Trainer):
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
+        return log
 
     def hard_negative_mining(self):
         self.model.eval()
@@ -119,13 +121,13 @@ class SvmTrainer(Trainer):
                 data, labels = batch.to(self.device)
                 feature, final = self.model(data)
                 outputs = self.svm(feature)
-                _, preds = torch.max(output, dim=1)
+                _, preds = torch.max(outputs, dim=1)
                 num_corrects += torch.sum(preds == labels)
                 fp_mask = (preds == 1)
                 tn_mask = (preds == 0)
                 hard_negative_index = data_indexes[fp_mask]
                 easy_negative_index = data_indexes[tn_mask]
-                hard_negative_indexes |= hard_negative_index
+                hard_negative_indexes |= set(hard_negative_index.tolist())
         acc = num_corrects / len(self.val_data_loader)
         self.logger.info('Finished Validation.')
         self.logger.info('Validation Accuracy: %.5f, Found %d Hard Negative Samples' % (

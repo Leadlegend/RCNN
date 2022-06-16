@@ -27,7 +27,7 @@ def main(configs):
     torch.set_printoptions(precision=5)
     svm_num = configs.model.output_size - 1
     CNNModel = model_factory[configs.model.name](configs.model)
-    CNNModel.load_state_dict(torch.load(configs.trainer.ckpt))
+    CNNModel._init_weights(configs.trainer.ckpt, True)
     configs.trainer.ckpt = None
     for idx in range(1, svm_num + 1):
         train(cfg=configs, idx=idx, cnn=CNNModel)

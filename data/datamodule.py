@@ -41,19 +41,19 @@ class DataModule:
             self.setup()
 
     def setup(self, idx=None):
-        if self.cfg.train is not None:
+        if self.cfg.train is not None and self.cfg.train.path is not None:
             self.logger.info("Constructing Train Data...")
             self.train_dataset = self._dataset(
                 self.cfg.train, tokenizer=self.tokenizer, idx=idx)
         else:
             self.logger.warning('No Valid Train Data.')
-        if self.cfg.val is not None:
+        if self.cfg.val is not None and self.cfg.val.path is not None:
             self.logger.info("Constructing Validation Data...")
             self.val_dataset = self._dataset(
                 self.cfg.val, tokenizer=self.tokenizer, idx=idx)
         else:
-            self.logger.warning('No Valid Val Data.')
-        if self.cfg.test is not None:
+            self.logger.warning('No Valid Validation Data.')
+        if self.cfg.test is not None and self.cfg.test.path is not None:
             self.logger.info("Constructing Test Data...")
             self.test_dataset = self._dataset(
                 self.cfg.test, tokenizer=self.tokenizer, idx=idx)

@@ -90,7 +90,7 @@ class FtCNNModel(CNNModel):
     def __init__(self, cfg):
         super(FtCNNModel, self).__init__(cfg)
 
-    def _init_weights(self, ckpt: str):
+    def _init_weights(self, ckpt: str, flag=False):
         if isinstance(ckpt, str):
             if not os.path.exists(ckpt):
                 self.logger.error(
@@ -105,5 +105,5 @@ class FtCNNModel(CNNModel):
         current_state = self.state_dict()
         keys = list(ckpt.keys())
         for key in keys:
-            if not key.startswith('fn10'):
+            if flag or not key.startswith('fn10'):
                 current_state[key] = ckpt[key]

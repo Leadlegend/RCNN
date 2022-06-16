@@ -307,7 +307,7 @@ class SVMDataset(BaseDataset):
         self.svm_file_name = [
             str(x) + '.json' for x in range(len(self.tokenizer))]
         if os.path.exists(os.path.join(self.svm_path, self.svm_file_name[idx])):
-            self._load_ckpt()
+            self._load_ckpt(idx)
         else:
             self._construct_dataset()
             self._save_and_clear()
@@ -323,13 +323,13 @@ class SVMDataset(BaseDataset):
     def __len__(self):
         return self.pos_num + self.neg_num
 
-    def _load_ckpt(self):
-        self.svm_file_name = [self.svm_file_name[0], self.svm_file_name[idx]]
+    def _load_ckpt(self, index: int):
+        self.svm_file_name = [self.svm_file_name[0], self.svm_file_name[index]]
         for idx, svm_file in enumerate(self.svm_file_name):
             svm_path = os.path.join(self.svm_path, svm_file)
             if not os.path.exists(svm_path):
                 raise ValueError('Bad Data Path %s' % svm_path)
-            with open(svm_path, 'r', encoding='utf-8'):
+            with open(svm_path, 'r', encoding='utf-8') as f:
                 for line in tqdm(f.readlines()):
                     data = json.loads(line.strip())
                     if idx:
