@@ -41,6 +41,14 @@ def ft_collate_fn(batch):
     return alex_collate_fn(batch, labeled=True)
 
 
+def svm_collate_fn(batch):
+    imgs, labels, idxs = trivial_collate_fn(batch)
+    imgs, labels = torch.from_numpy(
+        imgs).float().permute(0, 3, 1, 2), torch.LongTensor(labels)
+    idxs = torch.Tensor(idxs)
+    return ImgBatch(imgs, labels), idxs
+
+
 def reg_collate_fn(batch):
     _, features, labels = trivial_collate_fn(batch)
     features, labels = torch.Tensor(

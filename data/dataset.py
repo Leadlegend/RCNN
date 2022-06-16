@@ -129,9 +129,9 @@ class FtDataset(BaseDataset):
         And we need another custom sampler to generate proper index
     """
 
-    def __init__(self, cfg, tokenizer, file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer, file_ext='.jpg', idx=None):
         super(FtDataset, self).__init__(
-            cfg, tokenizer=tokenizer, file_ext=file_ext)
+            cfg, tokenizer=tokenizer, file_ext=file_ext, idx=idx)
         self.info = cfg.info
         self.threshold = cfg.threshold
         self.region_path = os.path.join(cfg.save_dir, 'ft.json')
@@ -415,14 +415,25 @@ class SVMDataset(BaseDataset):
         else:
             idx -= len(self.pos_data_map)
             data = self.neg_data_map[idx]
-        return self._get(data)
+        imgdata = self._get(data)
+        return (imgdata.img, imgdata.label, idx)
 
     def _get(self, data):
         img = cv2.imread(data['img_path'])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img, _ = clip_pic(img, data['region'], context=self.context_size)
         img = resize_image(img, self.img_size, self.img_size)
-        return ImgData(img, data['label'])
+        return ImgData(img, int(data['label'] > 0))
+
+    def init_sampler_indices(self, neg_size):
+        """
+        initialize subset indices list for hard negative mining.
+        """
+        pos_indices = list(range(self.pos_num))
+        neg_indices = np.random.choice(
+            range(self.neg_num), replace=False, size=neg_size)
+        neg_indices = [x + self.pos_num for x in neg_indices]
+        return pos_indices, neg_indices
 
 
 class RegDataset(Dataset):

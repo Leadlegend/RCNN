@@ -13,5 +13,5 @@ collate_factory = {
     'alex': alex_collate_fn,
     'finetune': ft_collate_fn,
     'reg': reg_collate_fn,
-    'svm': None
+    'svm': svm_collate_cn,
 }

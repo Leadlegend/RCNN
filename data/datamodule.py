@@ -33,7 +33,7 @@ class DataModule:
             self.tokenizer = Tokenizer(self.tokenizer)
         self._dataset = dataset_factory[name]
         self._collate_fn = collate_factory[name]
-        self.epoch_flag = (name in ['alex', 'reg'])
+        self.epoch_flag = (name in ['alex', 'svm', 'reg'])
         self.train_dataset, self.val_dataset, self.test_dataset = None, None, None
         if idx > 0:
             self.setup(idx)
@@ -60,25 +60,26 @@ class DataModule:
         else:
             self.logger.warning('No Valid Test Data.')
 
-    def _construct_loader(self, cfg, dataset, flag=False):
+    def _construct_loader(self, cfg, dataset, sampler=None, flag=False):
         if cfg is None:
             return None
         if self.epoch_flag or flag:
-            return DataLoader(dataset=dataset,
-                              batch_size=cfg.batch_size,
-                              collate_fn=self._collate_fn,
-                              pin_memory=cfg.pin,
-                              num_workers=cfg.workers,
-                              shuffle=cfg.shuffle
-                              )
+            if sampler is None:
+                return DataLoader(dataset=dataset, batch_size=cfg.batch_size,
+                                  collate_fn=self._collate_fn, pin_memory=cfg.pin,
+                                  num_workers=cfg.workers, shuffle=cfg.shuffle)
+            else:
+                return DataLoader(dataset=dataset, batch_size=cfg.batch_size,
+                                  sampler=sampler, collate_fn=self._collate_fn,
+                                  pin_memory=cfg.pin, num_workers=cfg.workers)
         else:
             return WarpDataLoader(dataset=dataset, batch_size=cfg.batch_size)
 
-    def train_dataloader(self):
-        return self._construct_loader(self.cfg.train, self.train_dataset)
+    def train_dataloader(self, sampler=None):
+        return self._construct_loader(self.cfg.train, self.train_dataset, sampler=sampler)
 
-    def val_dataloader(self):
-        return self._construct_loader(self.cfg.val, self.val_dataset, flag=True)
+    def val_dataloader(self, sampler=None):
+        return self._construct_loader(self.cfg.val, self.val_dataset, sampler=sampler, flag=True)
 
     def test_dataloader(self):
         return self._construct_loader(self.cfg.test, self.test_dataset, flag=True)
