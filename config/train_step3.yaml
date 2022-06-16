@@ -1,6 +1,6 @@
 defaults:
   - data: train_step3
-  - model: null
+  - model: train_step3
   - trainer: train_step3
   - logger: base
   - _self_
