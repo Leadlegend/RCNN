@@ -37,4 +37,4 @@ python train_step2.py hydra.run.dir=./outputs/your-own-directory
 
 The evaluation part of this project is from [`Object-Detection-Metrics`](https://github.com/rafaelpadilla/Object-Detection-Metrics#asterisk) projects.
 
-You can check the evaluation results by first running `./script/test.sh` and then runing `python evaluation/pascalvoc.py`.
+You can check the evaluation results by first running `./script/test.sh`, which will run './evaluation/pascalvoc.py'
