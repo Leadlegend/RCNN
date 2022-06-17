@@ -1,0 +1,13 @@
+path: ../../test_data
+info:
+  year: '2007'
+  image_set: test
+  download: false
+batch_size: 128
+shuffle: false
+img_size: 227
+context: 16
+pin: false
+threshold: 0.5
+workers: 4
+save_dir: ../../test_data/generate

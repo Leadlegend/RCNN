@@ -121,7 +121,7 @@ class AlexnetDataset(BaseDataset):
 
 class FtDataset(BaseDataset):
     """
-        target data format: img, List[object], 
+        target data format: img, List[object],
         where object consists of regoin-level label and bounding box
         and the data source is for detection
         we treat negative sample as label=0, which means 'background' in dataset
@@ -444,7 +444,7 @@ class RegDataset(Dataset):
     def _load_ckpt(self, dir):
         path = os.path.join(dir, 'box.json')
         assert os.path.exists(path)
-        self.data_map = joblib.load(path)
+        self.data_map = json.loads(path)
 
     def _calc_bbox(self, region_pred, region_gold, iou):
         box_label = np.zeros(5)
@@ -465,3 +465,80 @@ class RegDataset(Dataset):
         else:
             box_label[0] = 1
         return box_label
+
+
+class TestDataset(BaseDataset):
+    def __init__(self, cfg, tokenizer, file_ext='.jpg'):
+        super(TestDataset, self).__init__(cfg, tokenizer, file_ext)
+        self.info = cfg.info
+        self.threshold = cfg.threshold
+        self.save_dir = cfg.save_dir
+        self.data_map = os.listdir(self.save_dir)
+        self.datas = list()
+        if len(self.data_map) > 0:
+            pass
+        else:
+            self._construct_dataset()
+
+    def __len__(self):
+        return len(self.data_map)
+
+    def __getitem__(self, idx: int):
+        filename = self.data_map[idx]
+        self._load_ckpt(filename)
+        return self._get(filename)
+
+    def _get(self, filename):
+        imgs = []
+        for data in self.datas:
+            img = cv2.imread(data['img_path'])
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img, _ = clip_pic(img, data['region'], context=self.context_size)
+            img = resize_image(img, self.img_size, self.img_size)
+            imgs.append(img)
+        return imgs, filename
+
+    def _construct_dataset(self):
+        dataset = VOCDetection(root=self.path, **self.info)
+        for idx in tqdm(range(len(dataset))):
+            img, target = dataset[idx]
+            img = np.array(img)  # RGB image
+            objects = target['annotation']['object']
+            data_path = os.path.join(self.path, 'VOCdevkit', target['annotation']['folder'],
+                                     'JPEGImages', target['annotation']['filename'])
+            filename = target['annotation']['filename'].replace(
+                'jpg', 'txt')
+            if isinstance(objects, dict):
+                objects = [objects]
+            datas = self._parse_data(img, data_path)
+            self._save(datas, filename)
+
+    def _parse_data(self, img, data_path):
+        _, regions_pred = region_proposal(
+            img, self.img_size, require_img=False)
+        res = list()
+        for region_pred in regions_pred:
+            if len(region_pred) == 4:
+                x, y, w, h = region_pred
+                xmax, ymax = x + w, y + h
+                region_pred = [x, y, xmax, ymax, w, h]
+            data = {'img_path': data_path, 'region': region_pred}
+            res.append(data)
+        return res
+
+    def _save(self, datas, filename):
+        path = os.path.join(self.save_dir, filename)
+        print("Writing into %s" % path)
+        with open(path, 'w', encoding='utf-8') as f:
+            for data in datas:
+                line = json.dumps(data) + '\n'
+                f.write(line)
+            f.close()
+
+    def _load_ckpt(self, filename):
+        self.datas.clear()
+        path = os.path.join(self.save_dir, filename)
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f.readlines():
+                data = json.loads(line.strip())
+                self.datas.append(data)

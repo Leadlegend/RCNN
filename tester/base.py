@@ -1,100 +1,140 @@
 import os
-import sys
 import torch
 import logging
 import numpy as np
 from tqdm import tqdm
+from collections import defaultdict
+
+
+def nms(rect_list, score_list, threshold: float = 0.3):
+    nms_rects, nms_scores = list(), list()
+    rect_array = np.array(rect_list)
+    score_array = np.array(score_list)
+
+    idxs = np.argsort(score_array)[::-1]
+    rect_array = rect_array[idxs]
+    score_array = score_array[idxs]
+    while len(score_array) > 0:
+        # 添加分类概率最大的边界框
+        nms_rects.append(rect_array[0])
+        nms_scores.append(score_array[0])
+        rect_array = rect_array[1:]
+        score_array = score_array[1:]
+        if len(score_array) <= 0:
+            break
+
+        iou_scores = iou(
+            np.array(nms_rects[len(nms_rects) - 1]), rect_array)
+        # 去除重叠率大于等于thresh的边界框
+        idxs = np.where(iou_scores < threshold)[0]
+        rect_array = rect_array[idxs]
+        score_array = score_array[idxs]
+    return nms_rects, nms_scores
 
 
 class Tester:
 
     def __init__(self,
-                 model,
+                 feature_model,
+                 svm_models,
                  criterion,
                  config,
                  device,
-                 data_loader,
-                 epoch_criterion=None):
+                 dataset,
+                 threshold=0.6):
         self.config = config
         self.device = device
-        self.model = model.to(device)
+        self.feature_model = feature_model.to(device)
+        self.svm_models = svm_models.to(device)
         self.criterion = criterion
-        self.epoch_criterion = epoch_criterion
-        self.epoch_loss_name = '%s_correlation' % config.epoch_criterion if epoch_criterion is not None else ''
-
-        self.data_loader = data_loader
+        self.threshold = threshold
+        self.dataset = dataset
         self.len_epoch = len(self.data_loader)
         self.checkpoint = config.ckpt
+        self.save_dir = config.save_dir
+        self.tokenizer = self.dataset.tokenizer
 
         # setup visualization writer instance
         self.logger = logging.getLogger('Tester')
         self._resume_checkpoint(self.checkpoint)
 
     def test(self):
-        result = self._test_epoch()
-        # save logged informations into log dict
-        log = dict()
-        log.update(result)
-        # print logged informations to the screen
-        for key, value in log.items():
-            self.logger.info('{:15s}: {}'.format(str(key), value))
+        self._test_epoch()
 
     def _test_epoch(self):
-        self.model.eval()
-        log = dict()
-        if self.epoch_criterion is not None:
-            labels_pred, labels_gold = torch.zeros(0, 0).to(
-                self.device), torch.zeros(0, 0).to(self.device)
+        self.feature_model.eval()
+        for svm in self.svm_models:
+            svm.eval()
         with torch.no_grad():
-            for batch_idx, batch in enumerate(tqdm(self.data_loader)):
-                data, target = batch.to(self.device)
-                output = self.model(data)
-                pred = self._out2pred(output)
-                loss = self.criterion(pred, target)
-                labels_pred, labels_gold = self._update_label(pred, target, labels_pred, labels_gold)
-                #self.logger.info('%s\t%s' %(labels_pred.shape, labels_gold.shape))
-                log.update({str(batch_idx): loss.item()})
+            for idx in tqdm(range(self.len_epoch)):
+                rect_dict = defaultdict(list)
+                score_dict = defaultdict(list)
+                imgs, rects, filename = self.dataset[idx]
+                data = torch.from_numpy(imgs).to(self.device)
+                feature, final = self.feature_model(data)
+                preds = torch.argmax(final).tolist()
+                for idx, pred in enumerate(preds):
+                    if pred != 0:
+                        svm = self.svm_models[pred-1]
+                        output = svm(feature)
+                        prob = torch.softmax(output, dim=1).cpu().numpy()[1]
+                        if prob > self.threshold:
+                            label = int(pred)
+                            rect_dict[label].append(rects[idx])
+                            score_dict[label].append(prob)
+                for label in rect_dict.keys():
+                    rect_dict[label], score_dict[label] = nms(rect_dict[label], score_dict[label])
+                self._generate_output(
+                    rect_dict, score_dict, filename)
 
-            if self.epoch_criterion is not None:
-                epoch_loss = self.epoch_criterion(labels_pred, labels_gold)
-                log.update({self.epoch_loss_name: epoch_loss})
-        return log
+    def _generate_output(rect_dict, score_dict, filename):
+        path = os.path.join(self.save_dir, filename)
+        with open(path, 'w', encoding='utf-8') as f:
+            for label in rect_dict.keys():
+                assert int(label) > 0
+                key = self.tokenizer(int(label))
+                for rect, score in zip(rect_dict[label], score_dict[label]):
+                    if len(rect) > 4:
+                        rect = rect[:4]
+                    line = list()
+                    line.append(key)
+                    line.append(score)
+                    line += list(rect)
+                    line = ' '.join(line)
+                    f.write(line)
+            f.close()
 
-    def _out2pred(self, output):
-        return output
-
-    def _update_label(self, y_pred, y_gold):
-        if self.epoch_criterion is not None:
-            raise NotImplementedError
-
-    def _progress(self, batch_idx):
-        base = '[{}/{} ({:.0f}%)]'
-        if hasattr(self.data_loader, 'n_samples'):
-            current = batch_idx * self.data_loader.batch_size
-            total = self.data_loader.n_samples
-        else:
-            current = batch_idx
-            total = self.len_epoch
-        return base.format(current, total, 100.0 * current / total)
-
-    def _resume_checkpoint(self, resume_path):
-        resume_path = str(resume_path)
-        if not os.path.exists(resume_path):
+    def _resume_checkpoint(self, ckpt_dir):
+        resume_path = str(ckpt_dir)
+        if not os.path.exists(ckpt_dir):
             self.logger.error("Bad checkpoint path: {}".format(resume_path))
-            sys.exit(1)
-        self.logger.info("Loading checkpoint: {} ...".format(resume_path))
-        checkpoint = torch.load(resume_path,
-                                map_location=torch.device(self.device))
-        # we should make resume process robust to use various kinds of ckpt
+            raise ValueError
+
+        self.logger.info(
+            "Loading Checkpoint of CNN Backend: {} ...".format(resume_path))
+        resume_path = os.path.join(ckpt_dir, 'cnn.pt')
+        checkpoint = torch.load(resume_path)
         if 'state_dict' in checkpoint:
+            checkpoint = checkpoint['state_dict']
+        try:
+            self.feature_model.load_state_dict(checkpoint, strict=True)
+        except Exception as e:
+            self.logger.error('Bad checkpoint format.', stack_info=True)
+            raise ValueError
+
+        svm_files = ['svm%d.pt' % x for x in range(
+            1, self.feature_model.cfg.output_size)]
+        self.logger.info(
+            "Loading Checkpoints of SVMs ...")
+        for i, svm_file in enumerate(svm_files):
+            svm_path = os.path.join(ckpt_dir, svm_file)
+            checkpoint = torch.load(svm_path)
+            if 'state_dict' in checkpoint:
+                checkpoint = checkpoint['state_dict']
             try:
-                self.model.load_state_dict(checkpoint['state_dict'],
-                                           strict=False)
+                self.svm_models[i].load_state_dict(checkpoint, strict=True)
             except Exception as e:
                 self.logger.error('Bad checkpoint format.', stack_info=True)
                 raise ValueError
-        else:
-            # which means that we load the ckpt not to resume training, thus the params may not match perfectly.
-            self.model.load_state_dict(checkpoint, strict=True)
 
-        self.logger.info("Checkpoint loaded.")
+        self.logger.info("Checkpoints loaded.")
