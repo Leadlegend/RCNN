@@ -14,3 +14,4 @@ train_data/
 test_data/
 valid_data/
 data.py
+evaluation/
