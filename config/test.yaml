@@ -1,0 +1,8 @@
+defaults:
+  - data: predict
+  - model: train_step3
+  - trainer: predict
+  - logger: base
+  - _self_
+
+name: test

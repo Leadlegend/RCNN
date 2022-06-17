@@ -1,5 +1,5 @@
 defaults:
-  - test: base
+  - test: voc2007
   - _self_
 
 train: null
