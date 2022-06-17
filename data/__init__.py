@@ -7,6 +7,7 @@ dataset_factory = {
     'finetune': FtDataset,
     'svm': SVMDataset,
     'reg': RegDataset,
+    'test': TestDataset,
 }
 
 collate_factory = {
@@ -14,4 +15,5 @@ collate_factory = {
     'finetune': ft_collate_fn,
     'reg': reg_collate_fn,
     'svm': svm_collate_fn,
+    'test': None,
 }

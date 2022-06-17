@@ -15,4 +15,5 @@ criterion_factory = {
     'finetune': CNNLoss,
     'svm': HingeLoss,
     'reg': RegLoss,
+    'test': None,
 }

@@ -4,3 +4,5 @@ defaults:
 
 train: null
 val: null
+tokenizer: ../../train_data/voc_vocab.txt
+

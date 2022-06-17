@@ -2,7 +2,7 @@ defaults:
   - base_train
 
 lr: 0
-ckpt: ./ckpt/
+ckpt: ../../ckpt/
 epoch: -1
 device: cuda:1
 save_dir: ../../evaluation/detections

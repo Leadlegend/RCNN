@@ -469,7 +469,7 @@ class RegDataset(Dataset):
 
 
 class TestDataset(BaseDataset):
-    def __init__(self, cfg, tokenizer, file_ext='.jpg'):
+    def __init__(self, cfg, tokenizer, file_ext='.jpg', idx=None):
         super(TestDataset, self).__init__(cfg, tokenizer, file_ext)
         self.info = cfg.info
         self.threshold = cfg.threshold
