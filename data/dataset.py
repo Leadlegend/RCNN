@@ -113,7 +113,7 @@ class AlexnetDataset(BaseDataset):
         # robust processor for labeled / unlabeled dataset
         img = cv2.imread(img_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = resize_img(img, self.img_size, self.img_size)
+        img = resize_image(img, self.img_size, self.img_size)
         img = np.asarray(img, dtype=np.float32)
         data = ImgData(img, label)
         return data
@@ -134,7 +134,8 @@ class FtDataset(BaseDataset):
             cfg, tokenizer=tokenizer, file_ext=file_ext, idx=idx)
         self.info = cfg.info
         self.threshold = cfg.threshold
-        self.region_path = os.path.join(cfg.save_dir, 'ft.json')
+        self.region_path = os.path.join(
+            cfg.save_dir, 'ft.json') if not cfg.path.endswith('.json') else cfg.path
         self.pos_data_map, self.neg_data_map = list(), list()
         self.pos_iter, self.neg_iter = None, None
         if os.path.exists(self.region_path):

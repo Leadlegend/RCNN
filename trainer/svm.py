@@ -46,8 +46,10 @@ class SvmTrainer(Trainer):
                 self.logger.debug('{:8s}: {}'.format(str(key), value))
 
             hard_indices = self.hard_negative_mining(epoch)
+            if self.best_acc[0]>0.99:
+                break
             self._update_data_loader(hard_indices)
-        self._save_checkpoint(self.epochs + 1)
+        #self._save_checkpoint(self.epochs + 1)
 
     def _train_epoch(self, epoch):
         self.model.eval()
@@ -89,13 +91,13 @@ class SvmTrainer(Trainer):
                 num_corrects += torch.sum(preds == labels)
                 fp_mask = (preds == 1)
                 #tn_mask = (preds == 0)
-                hard_negative_index = data_indexes[fp_mask]
+                hard_negative_index = data_indexes[fp_mask].int()
                 #easy_negative_index = data_indexes[tn_mask]
                 hard_negative_indexes.update(set(hard_negative_index.tolist()))
         acc = num_corrects / len(self._overall_indices)
         if acc > self.best_acc[0]:
             self.best_acc = (acc, epoch)
-            if epoch > 2:
+            if epoch > 1:
                 self._save_checkpoint(epoch)
 
         self.logger.info('Finished Validation.')
