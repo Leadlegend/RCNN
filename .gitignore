@@ -14,5 +14,5 @@ train_data/
 test_data/
 valid_data/
 data.py
-#evaluation/groundtruths
-#evaluation/detections
+evaluation/results
+evaluation/detections

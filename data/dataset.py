@@ -476,6 +476,7 @@ class TestDataset(BaseDataset):
         self.save_dir = cfg.save_dir
         self.data_map = os.listdir(self.save_dir)
         self.datas = list()
+        self.data_size = [227, 227, 3]
         if len(self.data_map) > 0:
             pass
         else:
@@ -490,24 +491,25 @@ class TestDataset(BaseDataset):
         return self._get(filename)
 
     def _get(self, filename):
-        imgs = []
-        for data in self.datas:
+        imgs, rects = np.zeros([len(self.datas)] + self.data_size), []
+        for idx, data in enumerate(self.datas):
             img = cv2.imread(data['img_path'])
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img, _ = clip_pic(img, data['region'], context=self.context_size)
             img = resize_image(img, self.img_size, self.img_size)
-            imgs.append(img)
-        return imgs, filename
+            imgs[idx] = img
+            rects.append(data['region'])
+        return imgs, rects, filename
 
     def _construct_dataset(self):
-        dataset = VOCDetection(root=self.path, **self.info)
+        dataset=VOCDetection(root = self.path, **self.info)
         for idx in tqdm(range(len(dataset))):
-            img, target = dataset[idx]
-            img = np.array(img)  # RGB image
-            objects = target['annotation']['object']
-            data_path = os.path.join(self.path, 'VOCdevkit', target['annotation']['folder'],
+            img, target=dataset[idx]
+            img=np.array(img)  # RGB image
+            objects=target['annotation']['object']
+            data_path=os.path.join(self.path, 'VOCdevkit', target['annotation']['folder'],
                                      'JPEGImages', target['annotation']['filename'])
-            filename = target['annotation']['filename'].replace(
+            filename=target['annotation']['filename'].replace(
                 'jpg', 'txt')
             if isinstance(objects, dict):
                 objects = [objects]

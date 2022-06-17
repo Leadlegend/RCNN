@@ -7,7 +7,6 @@ from logger import setup_logging
 from tester.base import Tester
 from data.datamodule import DataModule
 from model import model_factory, criterion_factory
-from data.util import iou
 
 
 def test(cfg):
